@@ -127,6 +127,7 @@ export class GitHub {
       this.treeCache = null; // force fresh tree/blobs for this attempt
       const files = await this.readFiles(reads);
       const op = await build(files);
+      if (!op || (!op.changes?.length && !op.deletions?.length)) return null; // nothing to do
       for (const c of op.changes || []) assertNotJournalPath(c.path);
       for (const d of op.deletions || []) assertNotJournalPath(d);
       try {

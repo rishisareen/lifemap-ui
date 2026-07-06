@@ -252,6 +252,70 @@ export function planReject(proposal, today) {
   return { changes: [], deletions: [proposal.path], processedLine: `- rejected ${proposal.id} — ${today}` };
 }
 
+// Batch several accept/reject decisions into ONE commit op. Proposals are
+// applied SEQUENTIALLY against a working copy, so two proposals touching the
+// same file stack instead of clobbering. Already-gone proposal files are
+// skipped (double-tap / concurrent session = no-op). Stale targets are
+// reported, not written, and their proposal files are kept for the UI.
+// Returns null when there is nothing left to do.
+export function buildInboxCommit(decisions, files, today) {
+  const working = { ...files };
+  const touched = new Set();
+  const deletions = [];
+  const applied = [], rejected = [], stale = [];
+  const processedLines = [];
+
+  for (const { proposal, action } of decisions) {
+    if (!(proposal.path in working)) continue; // already processed elsewhere
+    let plan;
+    try {
+      plan = action === "accept" ? planAccept(proposal, working, today) : planReject(proposal, today);
+    } catch (e) {
+      stale.push({ path: proposal.path, id: proposal.id, reason: e.message });
+      continue;
+    }
+    for (const c of plan.changes) {
+      working[c.path] = c.text;
+      touched.add(c.path);
+    }
+    for (const d of plan.deletions) {
+      deletions.push(d);
+      delete working[d];
+    }
+    processedLines.push(plan.processedLine);
+    (action === "accept" ? applied : rejected).push(proposal.id);
+  }
+
+  if (!processedLines.length) return stale.length ? { message: "", changes: [], deletions: [], applied, rejected, stale } : null;
+
+  const PROCESSED = "Ledger/Inbox/_processed.md";
+  const cur = working[PROCESSED] ?? "- baseline 2026-07-05\n";
+  working[PROCESSED] = cur.replace(/\n*$/, "\n") + processedLines.join("\n") + "\n";
+  touched.add(PROCESSED);
+
+  const parts = [];
+  if (applied.length) parts.push(`applied ${applied.length}`);
+  if (rejected.length) parts.push(`rejected ${rejected.length}`);
+  return {
+    message: `ui: inbox — ${parts.join(", ")}`,
+    changes: [...touched].map((path) => ({ path, text: working[path] })),
+    deletions, applied, rejected, stale,
+  };
+}
+
+// One human line per proposal card.
+export function proposalSummary(p) {
+  const f = p.fm;
+  switch (f.type) {
+    case "metric": return `${f.target} = ${f.payload_value} on ${f.payload_date}`;
+    case "log": return `log on ${f.target}: “${f.payload_text}” (${f.payload_date})`;
+    case "milestone": return `milestone done on ${f.target}: “${f.payload_text}”`;
+    case "lesson": return `lesson [${f.pillar}]: “${f.payload_text}”`;
+    case "idea": return `new idea [${f.pillar}]: “${f.payload_text}”`;
+    default: return `unknown proposal type`;
+  }
+}
+
 export function slugify(text) {
   return text.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").split("-").slice(0, 5).join("-");
 }

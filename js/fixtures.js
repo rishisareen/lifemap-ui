@@ -94,7 +94,38 @@ forcing_function: "Thesis outline this month"
   "Ledger/Metrics/protein.csv": `date,value,source,note\n${TODAY_FIX},155,clerk,\n`,
   "Ledger/Metrics/sleep_quality.csv": "date,value,source,note\n",
   "Ledger/Inbox/_processed.md": "- baseline 2026-07-05\n",
-  "Ledger/Inbox/demo-proposal.md": "---\nid: demo\ntype: lesson\n---\ndemo",
+  [`Ledger/Inbox/${plus(-1)}-metric-weight.md`]: `---
+id: demo11111111
+journal_date: ${plus(-1)}
+type: metric
+target: weight
+payload_date: ${plus(-1)}
+payload_value: "84.4"
+---
+
+**Evidence:** "weighed in at 84.4 this morning" (journal ${plus(-1)}).`,
+  [`Ledger/Inbox/${plus(-1)}-log-training.md`]: `---
+id: demo22222222
+journal_date: ${plus(-1)}
+type: log
+target: resume-training-cut-80kg
+payload_date: ${plus(-1)}
+payload_text: "Swim 2k + rehab set, back felt fine"
+---
+
+**Evidence:** "did the full rehab set after a 2k swim, no pain" (journal ${plus(-1)}).`,
+  [`Ledger/Inbox/${plus(-1)}-lesson-mind.md`]: `---
+id: demo33333333
+journal_date: ${plus(-1)}
+type: lesson
+pillar: mind
+payload_date: ${plus(-1)}
+payload_text: "Presence beats productivity when family is in the house"
+---
+
+**Evidence:** "the day felt right because I stopped trying to be productive" (journal ${plus(-1)}).
+
+**Notes:** Borderline — accept only if it belongs in the annual lessons file.`,
   [`Daily Journal/${Y}/${String(Mn).padStart(2, "0")} (${MONS[Mn - 1]})/${String(D).padStart(2, "0")}-${MONS[Mn - 1]}.md`]: "### demo journal entry\n",
 };
 
@@ -114,6 +145,7 @@ export class FakeGitHub {
   }
   async commitOp(build, { reads = [] } = {}) {
     const op = await build(await this.readFiles(reads));
+    if (!op || !((op.changes || []).length + (op.deletions || []).length)) return null;
     for (const c of op.changes || []) this.files[c.path] = c.text;
     for (const d of op.deletions || []) delete this.files[d];
     this.commits.push(op.message);

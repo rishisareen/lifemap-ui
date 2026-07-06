@@ -4,10 +4,11 @@
 import { connect } from "./setup.js";
 import { classifyCommit, ageString } from "./model.js";
 import { renderToday } from "./today.js";
+import { renderInbox } from "./inbox.js";
 
 const SCREENS = {
   today:  { title: "Today",  render: renderToday },
-  inbox:  { title: "Inbox",  unit: "Unit 5" },
+  inbox:  { title: "Inbox",  render: renderInbox },
   board:  { title: "Board",  unit: "Unit 6" },
   review: { title: "Review", unit: "Units 7–8, 10" },
   trends: { title: "Trends", unit: "Unit 9" },
@@ -34,7 +35,7 @@ async function renderScreen() {
   const view = document.getElementById("view");
   view.replaceChildren();
 
-  if (DEMO && tab === "today") {
+  if (DEMO) {
     const note = document.createElement("p");
     note.className = "muted";
     note.textContent = "▦ demo data — nothing here is real and nothing is written to GitHub";
@@ -118,4 +119,5 @@ async function boot() {
 }
 
 addEventListener("hashchange", renderScreen);
+addEventListener("lifemap:changed", () => renderStatus());
 boot();

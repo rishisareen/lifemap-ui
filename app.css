@@ -86,3 +86,24 @@ dialog::backdrop { background: rgba(0,0,0,.35); }
 .logrow label { color: var(--ink); font-size: .95rem; }
 ol { margin: .3rem 0 .2rem 1.2rem; padding: 0; }
 ol li { margin: .25rem 0; }
+
+/* Board */
+.board { display: grid; grid-template-columns: repeat(4, 1fr); gap: .8rem; }
+@media (max-width: 720px) { .board { grid-template-columns: 1fr 1fr; } }
+.col {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: .6rem; min-height: 4rem;
+}
+.col.drop { border-color: var(--accent); border-style: dashed; }
+.col h3 { margin: .1rem .2rem .5rem; font-size: .8rem; text-transform: uppercase;
+  letter-spacing: .05em; color: var(--muted); }
+.commit-card {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 9px;
+  padding: .5rem .6rem; margin-bottom: .5rem; cursor: grab;
+}
+.commit-card:active { cursor: grabbing; }
+.cardtop { display: flex; justify-content: space-between; align-items: baseline; gap: .4rem; }
+.cardtop strong { font-size: .92rem; line-height: 1.3; }
+.commit-card .floors { margin-top: .35rem; gap: .3rem; }
+.commit-card button { padding: .15rem .5rem; font-size: .78rem; }
+.chip.rock { color: var(--accent); border-color: var(--accent); }

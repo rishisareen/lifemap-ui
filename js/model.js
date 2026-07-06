@@ -76,6 +76,77 @@ export function checkMilestone(text, payloadText) {
   return null;
 }
 
+// ---------- board: lifecycle transitions ----------
+//
+// Each returns { text } (the rewritten commitment file). Rules mirror
+// _System/OS-Manual.md: commit needs a gate; close needs done|retired
+// (+reason); reschedule keeps state active, bumps carry, needs a new gate.
+
+export function boardColumn(c) {
+  if (c.state === "idea") return "ideas";
+  if (c.state === "committed") return "committed";
+  if (c.state === "done" || c.state === "retired") return "closed";
+  return "active"; // active, blocked
+}
+
+export function transition(text, { to, gate, disposition, reason, today }) {
+  if (to === "committed") {
+    if (!gate) throw new Error("A gate date is required to commit (OS-Manual rule 1).");
+    let t = setFrontmatterField(text, "state", "committed");
+    t = setFrontmatterField(t, "committed_on", today);
+    t = setFrontmatterField(t, "gate_date", gate);
+    return { text: appendLogLine(t, `- ${today} — Committed (gate ${gate})`) };
+  }
+  if (to === "active") {
+    return { text: setFrontmatterField(text, "state", "active") };
+  }
+  if (to === "closed") {
+    if (disposition !== "done" && disposition !== "retired") throw new Error("Closing needs done or retired.");
+    if (disposition === "retired" && !reason?.trim()) throw new Error("A reason is required to retire.");
+    let t = setFrontmatterField(text, "state", disposition);
+    t = setFrontmatterField(t, "closed_on", today);
+    const line = disposition === "done" ? "Done." : `Retired: ${reason.trim()}`;
+    return { text: appendLogLine(t, `- ${today} — ${line}`) };
+  }
+  throw new Error(`unknown transition target: ${to}`);
+}
+
+export function reschedule(text, { gate, today, note }) {
+  if (!gate) throw new Error("A new gate date is required to reschedule.");
+  const carry = (parseInt(parseFrontmatter(text).carry_count || "0", 10) || 0) + 1;
+  let t = setFrontmatterField(text, "carry_count", String(carry));
+  t = setFrontmatterField(t, "gate_date", gate);
+  t = setFrontmatterField(t, "state", "active");
+  const tail = note?.trim() ? `: ${note.trim()}` : "";
+  return { text: appendLogLine(t, `- ${today} — Rescheduled to ${gate} (carry #${carry})${tail}`) };
+}
+
+// Would moving `card` into `toColumn` exceed the 3-rock budget? Only rocks
+// landing in active/committed count; a rock already counted (same column
+// family) doesn't re-trip it.
+export function rockBudgetBlocks(card, toColumn, allCommitments) {
+  if (!card.isRock) return false;
+  if (toColumn !== "active" && toColumn !== "committed") return false;
+  const counted = allCommitments.filter(
+    (c) => c.isRock && (c.state === "active" || c.state === "committed") && !(card.id && c.id === card.id));
+  return counted.length >= 3;
+}
+
+export function newIdeaFile(title, pillar, today, existingPaths) {
+  let slug = slugify(title);
+  let path = `Ledger/Commitments/${slug}.md`;
+  for (let n = 2; existingPaths.has(path); n++) path = `Ledger/Commitments/${slug}-${n}.md`;
+  const idFromPath = path.slice("Ledger/Commitments/".length, -3);
+  const text = [
+    "---", `id: ${idFromPath}`, `title: "${title.replace(/"/g, "'")}"`, `pillar: ${pillar}`,
+    "horizon: idea", "is_rock: false", "state: idea", `captured_on: ${today}`,
+    "carry_count: 0", 'forcing_function: ""', "---", "",
+    `*Captured ${today} via the board. Promote to Committed with a gate date when it's real.*`, "",
+    "## Log", "",
+  ].join("\n") + "\n";
+  return { path, text };
+}
+
 // ---------- CSV (metrics) ----------
 
 export function parseCSV(text) {

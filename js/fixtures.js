@@ -89,6 +89,45 @@ forcing_function: "Thesis outline this month"
 ---
 ## Log
 `,
+  "Ledger/Commitments/learn-woodworking.md": `---
+id: learn-woodworking
+title: "Learn woodworking at the Gurgaon studio"
+pillar: joy
+horizon: idea
+is_rock: false
+state: idea
+captured_on: ${plus(-3)}
+carry_count: 0
+forcing_function: ""
+---
+*Captured via the board.*
+
+## Log
+`,
+  "Ledger/Commitments/japan-trip.md": `---
+id: japan-trip
+title: Japan with Riya & Ryan
+pillar: travel
+is_rock: false
+state: done
+closed_on: ${plus(-2)}
+carry_count: 0
+---
+## Log
+- ${plus(-2)} — Done.
+`,
+  "Archive/Commitments/micro-adventure.md": `---
+id: micro-adventure
+title: One micro-adventure every other month
+pillar: joy
+is_rock: false
+state: retired
+closed_on: ${plus(-40)}
+carry_count: 5
+---
+## Log
+- ${plus(-40)} — Retired: too much on; joy comes via people.
+`,
   "Ledger/Metrics/weight.csv": `date,value,source,note\n${plus(-5)},85,q3-review,start\n${plus(-1)},84.6,ui,\n`,
   "Ledger/Metrics/steps.csv": "date,value,source,note\n",
   "Ledger/Metrics/protein.csv": `date,value,source,note\n${TODAY_FIX},155,clerk,\n`,

@@ -5,11 +5,12 @@ import { connect } from "./setup.js";
 import { classifyCommit, ageString } from "./model.js";
 import { renderToday } from "./today.js";
 import { renderInbox } from "./inbox.js";
+import { renderBoard } from "./board.js";
 
 const SCREENS = {
   today:  { title: "Today",  render: renderToday },
   inbox:  { title: "Inbox",  render: renderInbox },
-  board:  { title: "Board",  unit: "Unit 6" },
+  board:  { title: "Board",  render: renderBoard },
   review: { title: "Review", unit: "Units 7–8, 10" },
   trends: { title: "Trends", unit: "Unit 9" },
 };

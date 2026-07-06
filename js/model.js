@@ -269,6 +269,149 @@ export function todaysMits(planText, dateStr) {
   return [];
 }
 
+// ---------- weekly review wizard ----------
+
+export function mondayOfISOWeek({ year, week }) {
+  const jan4 = new Date(Date.UTC(year, 0, 4, 12));
+  const jan4Mon = new Date(jan4);
+  jan4Mon.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() + 6) % 7)); // Monday of ISO week 1
+  jan4Mon.setUTCDate(jan4Mon.getUTCDate() + (week - 1) * 7);
+  return jan4Mon.toISOString().slice(0, 10);
+}
+
+// Fri–Sun → plan next week; Mon–Thu → the current week.
+export function reviewTargetWeek(todayStr) {
+  const weekday = (new Date(todayStr + "T12:00Z").getUTCDay() + 6) % 7; // Mon=0
+  if (weekday >= 4) { // Fri, Sat, Sun
+    const nextMon = new Date(todayStr + "T12:00Z");
+    nextMon.setUTCDate(nextMon.getUTCDate() + (7 - weekday));
+    return isoWeek(nextMon.toISOString().slice(0, 10));
+  }
+  return isoWeek(todayStr);
+}
+
+export function weeklyDraftPath({ year, week }) {
+  return `Plans/_drafts/${year} - Weekly Plan - W${String(week).padStart(2, "0")}.md`;
+}
+export function weeklyFinalPath({ year, week }) {
+  return `Weekly Plan/${year}/${year} - Weekly Plan - W${String(week).padStart(2, "0")}.md`;
+}
+
+export function windowLabel(mondayStr) {
+  const mon = new Date(mondayStr + "T12:00Z");
+  const sun = new Date(mon); sun.setUTCDate(mon.getUTCDate() + 6);
+  const f = (d) => `${MONS[d.getUTCMonth()]} ${d.getUTCDate()}`;
+  return `${f(mon)} → ${f(sun)}`;
+}
+
+const WIZ_SECTIONS = {
+  celebrate: "## STEP THREE : CELEBRATE LAST WEEK",
+  misses: "## STEP FOUR : ANALYZE WHAT DIDN'T HAPPEN",
+  outcomes: "## STEP FIVE : TOP OUTCOMES",
+  mits: "## STEP SIX : SCHEDULE",
+  theme: "## 🎯 Theme",
+  truth: "## 🪞 One Uncomfortable Truth",
+};
+
+export function buildWeeklyPlan(state, status) {
+  const { target, rocks = [], celebrate = [], misses = [], outcomes = [] } = state;
+  const monday = mondayOfISOWeek(target);
+  const mits = state.mits || {};
+  const dayDate = (i) => {
+    const d = new Date(monday + "T12:00Z"); d.setUTCDate(d.getUTCDate() + i);
+    return `${MONS[d.getUTCMonth()]} ${d.getUTCDate()}`;
+  };
+  const lines = [
+    "---",
+    `week: ${target.year}-W${String(target.week).padStart(2, "0")}`,
+    `window: ${windowLabel(monday)}`,
+    `status: ${status}`,
+    `rocks: ${rocks.join(", ")}`,
+    "---", "",
+    `## 🗓️ Weekly Plan (W${target.week})`, "",
+    `Date: ${monday} Monday — window ${windowLabel(monday)}`, "",
+    WIZ_SECTIONS.celebrate, "",
+    ...(celebrate.length ? celebrate.map((c) => `- ${c}`) : ["- "]), "",
+    WIZ_SECTIONS.misses, "",
+    ...(misses.length ? misses.map((m) => `- ${m}`) : ["- "]), "",
+    WIZ_SECTIONS.outcomes, "",
+    ...(outcomes.length ? outcomes.map((o, i) => `${i + 1}. ${o}`) : ["1. "]), "",
+    WIZ_SECTIONS.mits, "",
+    ...WD.map((wd, i) => `- [ ] **${wd} ${dayDate(i)}** — ${mits[wd] || ""}`.trimEnd()), "",
+    WIZ_SECTIONS.theme, "",
+    `> ${state.theme || ""}`, "",
+    WIZ_SECTIONS.truth, "",
+    state.truth || "",
+    "",
+    "*I am a warrior monk.*", "",
+  ];
+  return lines.join("\n");
+}
+
+export function parseWeeklyPlan(text) {
+  const fm = parseFrontmatter(text);
+  const [year, week] = (fm.week || "-W").split("-W");
+  const section = (heading, next) => {
+    const start = text.indexOf(heading);
+    if (start < 0) return "";
+    const from = start + heading.length;
+    const end = next ? text.indexOf(next, from) : text.length;
+    return text.slice(from, end < 0 ? text.length : end).trim();
+  };
+  const bullets = (s) => s.split("\n").map((l) => l.replace(/^\s*-\s?/, "").trim())
+    .filter((l) => l !== "");
+  const numbered = (s) => s.split("\n").map((l) => l.replace(/^\s*\d+\.\s?/, "").trim())
+    .filter((l) => l !== "");
+
+  const celebrate = bullets(section(WIZ_SECTIONS.celebrate, WIZ_SECTIONS.misses));
+  const misses = bullets(section(WIZ_SECTIONS.misses, WIZ_SECTIONS.outcomes));
+  const outcomes = numbered(section(WIZ_SECTIONS.outcomes, WIZ_SECTIONS.mits));
+  const mitBlock = section(WIZ_SECTIONS.mits, WIZ_SECTIONS.theme);
+  const mits = {};
+  for (const wd of WD) {
+    const m = new RegExp(`- \\[[ xX]\\] \\*\\*${wd} [^*]+\\*\\* — (.*)`).exec(mitBlock);
+    mits[wd] = m ? m[1].trim() : "";
+  }
+  const theme = section(WIZ_SECTIONS.theme, WIZ_SECTIONS.truth).replace(/^>\s?/, "").trim();
+  let truth = section(WIZ_SECTIONS.truth, null);
+  truth = truth.replace(/\n+\*I am a warrior monk\.\*\s*$/, "").trim();
+
+  return {
+    target: { year: parseInt(year, 10), week: parseInt(week, 10) },
+    rocks: (fm.rocks || "").split(",").map((s) => s.trim()).filter(Boolean),
+    celebrate, misses, outcomes, mits, theme, truth,
+  };
+}
+
+export function buildWeeklyDraft(state) {
+  return {
+    message: `ui: weekly review draft W${state.target.week}`,
+    changes: [{ path: weeklyDraftPath(state.target), text: buildWeeklyPlan(state, "draft") }],
+    deletions: [],
+  };
+}
+
+// Commit the week: final plan (committed) + delete draft + apply each carry
+// decision to its commitment file — all one atomic op.
+export function buildWeeklyCommit(state, decisions, files, today) {
+  const changes = [{ path: weeklyFinalPath(state.target), text: buildWeeklyPlan(state, "committed") }];
+  for (const d of decisions || []) {
+    const path = `Ledger/Commitments/${d.id}.md`;
+    const cur = files[path];
+    if (cur == null) continue; // archived/renamed meanwhile — skip gracefully
+    if (d.action === "reschedule") {
+      changes.push({ path, text: reschedule(cur, { gate: d.gate, today, note: d.note }).text });
+    } else if (d.action === "retire") {
+      changes.push({ path, text: transition(cur, { to: "closed", disposition: "retired", reason: d.reason, today }).text });
+    }
+  }
+  return {
+    message: `ui: commit weekly plan W${state.target.week}`,
+    changes,
+    deletions: [weeklyDraftPath(state.target)],
+  };
+}
+
 // ---------- inbox proposals ----------
 
 export const PROPOSAL_TYPES = ["metric", "log", "milestone", "lesson", "idea"];

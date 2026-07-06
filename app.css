@@ -107,3 +107,7 @@ ol li { margin: .25rem 0; }
 .commit-card .floors { margin-top: .35rem; gap: .3rem; }
 .commit-card button { padding: .15rem .5rem; font-size: .78rem; }
 .chip.rock { color: var(--accent); border-color: var(--accent); }
+
+textarea, input[type=text] { font: inherit; }
+.card h3 { margin: .2rem 0 .3rem; font-size: 1rem; }
+label.muted { display:block; margin:.5rem 0 .15rem; font-size:.82rem; }

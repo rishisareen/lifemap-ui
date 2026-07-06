@@ -1,0 +1,9 @@
+{
+  "name": "lifemap-ui",
+  "private": true,
+  "type": "module",
+  "description": "Static planning UI for the private lifemap repo. No build step, no dependencies \u2014 this file exists only so `node --test` runs the test suite.",
+  "scripts": {
+    "test": "node --test"
+  }
+}

@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy"
+      content="default-src 'self'; connect-src 'self' https://api.github.com; img-src 'self' data:; style-src 'self'; script-src 'self'; base-uri 'none'; form-action 'none'">
+<title>LifeMap</title>
+<link rel="stylesheet" href="app.css?v=1">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='80' font-size='80'>🧭</text></svg>">
+</head>
+<body>
+<header id="topbar">
+  <span id="brand">🧭 LifeMap</span>
+  <nav id="tabs">
+    <a href="#today">Today</a>
+    <a href="#inbox">Inbox <span id="inbox-badge" class="badge" hidden></span></a>
+    <a href="#board">Board</a>
+    <a href="#review">Review</a>
+    <a href="#trends">Trends</a>
+  </nav>
+  <span id="status" title="last activity: bridge / actions / ui"></span>
+</header>
+
+<main id="view" aria-live="polite">
+  <p class="muted">Loading…</p>
+</main>
+
+<dialog id="setup">
+  <h2>Connect to your LifeMap repo</h2>
+  <p>Paste a <strong>fine-grained personal access token</strong> scoped to the single
+     private repo, with <strong>Contents: Read and write</strong> and
+     <strong>Actions: Read and write</strong>. Create one at
+     GitHub → Settings → Developer settings → Fine-grained tokens.</p>
+  <p class="muted">The token is stored only in this browser (localStorage) and sent only to api.github.com.</p>
+  <form method="dialog" id="setup-form">
+    <input id="setup-token" type="password" placeholder="github_pat_…" autocomplete="off" required>
+    <button id="setup-save" value="save">Validate &amp; save</button>
+  </form>
+  <p id="setup-msg" role="alert"></p>
+</dialog>
+
+<script type="module" src="js/main.js?v=1"></script>
+</body>
+</html>

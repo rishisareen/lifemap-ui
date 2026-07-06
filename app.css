@@ -1,0 +1,66 @@
+/* LifeMap — minimal, calm, system-native. No frameworks, no webfonts. */
+
+:root {
+  --bg: #faf9f6; --panel: #ffffff; --ink: #23211c; --muted: #8a857a;
+  --line: #e7e3da; --accent: #b4552d; --ok: #3c7a4e; --warn: #b58a2e; --bad: #b03a2e;
+}
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#171613; --panel:#201e1a; --ink:#ece8df; --muted:#948e81; --line:#33302a; --accent:#e0794a; }
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font: 16px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+#topbar {
+  display: flex; align-items: center; gap: 1.2rem; flex-wrap: wrap;
+  padding: .7rem 1.2rem; border-bottom: 1px solid var(--line);
+  position: sticky; top: 0; background: var(--bg); z-index: 5;
+}
+#brand { font-weight: 700; letter-spacing: .02em; }
+#tabs { display: flex; gap: .2rem; flex: 1; }
+#tabs a {
+  color: var(--muted); text-decoration: none; padding: .25rem .7rem; border-radius: 999px;
+}
+#tabs a.active { color: var(--ink); background: var(--panel); border: 1px solid var(--line); }
+#status { font-size: .78rem; color: var(--muted); white-space: nowrap; }
+#status .stale { color: var(--warn); }
+#status .failed { color: var(--bad); }
+
+.badge {
+  background: var(--accent); color: #fff; border-radius: 999px;
+  font-size: .7rem; padding: 0 .45em; vertical-align: text-top;
+}
+
+main { max-width: 860px; margin: 0 auto; padding: 1.4rem 1.2rem 4rem; }
+
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px;
+  padding: 1rem 1.2rem; margin-bottom: 1rem;
+}
+.card h2 { margin: .1rem 0 .6rem; font-size: 1.05rem; }
+.muted { color: var(--muted); }
+.err { color: var(--bad); }
+.ok { color: var(--ok); }
+
+button {
+  font: inherit; border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  border-radius: 8px; padding: .35rem .9rem; cursor: pointer;
+}
+button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+button:disabled { opacity: .5; cursor: default; }
+
+input, textarea, select {
+  font: inherit; color: var(--ink); background: var(--bg);
+  border: 1px solid var(--line); border-radius: 8px; padding: .4rem .6rem;
+}
+
+dialog {
+  border: 1px solid var(--line); border-radius: 14px; padding: 1.4rem 1.6rem;
+  background: var(--panel); color: var(--ink); max-width: 30rem;
+}
+dialog::backdrop { background: rgba(0,0,0,.35); }
+#setup-form { display: flex; gap: .6rem; margin-top: .6rem; }
+#setup-token { flex: 1; }

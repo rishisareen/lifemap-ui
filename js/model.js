@@ -265,6 +265,108 @@ function ideaFile(slug, fm, today) {
   ].join("\n");
 }
 
+// ---------- habits / floors ----------
+
+// Mirrors lifemap_compile.py active_floors(): rows of the table under
+// "## Active daily floors", first two columns.
+export function parseFloors(text) {
+  const m = /## Active daily floors[^\n]*\n([\s\S]*?)(\n## |$)/.exec(text);
+  if (!m) return [];
+  const floors = [];
+  for (const ln of m[1].split("\n")) {
+    const cells = ln.trim().replace(/^\||\|$/g, "").split("|").map((c) => c.trim());
+    if (cells.length >= 2 && cells[0] && cells[0] !== "habit" && !/^-+$/.test(cells[0])) {
+      floors.push({ habit: cells[0], floor: cells[1] });
+    }
+  }
+  return floors;
+}
+
+// Which metric CSV (if any) a floor logs to; "journal" = journal-presence
+// status; "status" = clerk-judged, display only.
+export function floorKind(floor) {
+  const map = { "steps-10k": "steps", "protein-floor": "protein" };
+  if (map[floor.habit]) return map[floor.habit];
+  if (floor.habit === "evening-journal") return "journal";
+  return "status";
+}
+
+// ---------- weekly plan selection (client-side mirror of weekly_plan()) ----------
+
+// Candidate plan paths for the ISO week: exact week first, then earlier weeks
+// descending. Caller reads them in order and takes the first non-draft.
+export function weeklyPlanCandidates(paths, { year, week }) {
+  const out = [];
+  const re = new RegExp(`^Weekly Plan/${year}/${year} - Weekly Plan - W(\\d+)\\.md$`);
+  for (const p of paths) {
+    const m = re.exec(p);
+    if (m) {
+      const w = parseInt(m[1], 10);
+      if (w <= week) out.push({ week: w, path: p });
+    }
+  }
+  return out.sort((a, b) => b.week - a.week);
+}
+
+// ---------- gate chips (live countdowns — never from compiled artifacts) ----------
+
+export function gateChips(commitments, todayStr) {
+  const chips = [];
+  for (const c of commitments) {
+    if (c.state !== "active" && c.state !== "committed") continue;
+    for (const [kind, d] of [["gate", c.gateDate], ["review", c.reviewBy]]) {
+      if (!d) continue;
+      if (kind === "review" && c.gateDate) continue; // gate is the sharper signal
+      const n = daysBetween(todayStr, d);
+      chips.push({
+        title: c.title, days: n,
+        label: `${kind} ${fmtDays(n)}`,
+        cls: n < 0 ? "overdue" : n <= 1 ? "urgent" : n <= 3 ? "soon" : "later",
+      });
+    }
+  }
+  return chips.sort((a, b) => a.days - b.days);
+}
+
+// ---------- metric logging (the batched write op) ----------
+
+export const METRIC_FILES = {
+  weight: "Ledger/Metrics/weight.csv",
+  steps: "Ledger/Metrics/steps.csv",
+  protein: "Ledger/Metrics/protein.csv",
+  sleep_quality: "Ledger/Metrics/sleep_quality.csv",
+};
+
+// pending: {metric: value}. Validates everything BEFORE building any change,
+// then upserts each metric's (today, ui) row. One commit for the whole batch.
+export function buildMetricCommit(pending, files, today) {
+  const entries = Object.entries(pending).filter(([, v]) => v !== "" && v != null);
+  if (!entries.length) throw new Error("nothing to log");
+  for (const [name, value] of entries) {
+    if (!METRIC_FILES[name]) throw new Error(`unknown metric: ${name}`);
+    const err = validateMetric(name, value);
+    if (err) throw new Error(err);
+  }
+  const changes = entries.map(([name, value]) => {
+    const path = METRIC_FILES[name];
+    const cur = files[path] ?? "date,value,source,note\n";
+    return { path, text: csvUpsert(cur, { date: today, value: String(value), source: "ui", note: "" }) };
+  });
+  const message = "ui: log " + entries.map(([n, v]) => `${n} ${v}`).join(", ");
+  return { message, changes, deletions: [] };
+}
+
+// What's already logged today (any source) — fills the inputs' "done" state.
+export function todaysLoggedValues(files, today) {
+  const out = {};
+  for (const [name, path] of Object.entries(METRIC_FILES)) {
+    if (!(path in files)) continue;
+    const rows = parseCSV(files[path]).rows.filter((r) => r.date === today);
+    if (rows.length) out[name] = rows[rows.length - 1].value;
+  }
+  return out;
+}
+
 // ---------- header status ----------
 
 export function classifyCommit(message) {

@@ -64,3 +64,25 @@ dialog {
 dialog::backdrop { background: rgba(0,0,0,.35); }
 #setup-form { display: flex; gap: .6rem; margin-top: .6rem; }
 #setup-token { flex: 1; }
+
+/* Today screen */
+.chip {
+  display: inline-block; border: 1px solid var(--line); border-radius: 999px;
+  padding: .1rem .6rem; font-size: .82rem; color: var(--muted); background: var(--bg);
+}
+.chip.ok { color: var(--ok); border-color: var(--ok); }
+.chip.err { color: var(--bad); border-color: var(--bad); }
+.chip.warn, .warn { color: var(--warn); }
+.chip.urgent, .chip.overdue { color: var(--bad); border-color: var(--bad); font-weight: 600; }
+.chip.soon { color: var(--warn); border-color: var(--warn); }
+.chip.later { }
+.chip.muted { color: var(--muted); }
+.floors { display: flex; flex-wrap: wrap; gap: .45rem; margin: .3rem 0; }
+.logrow {
+  display: grid; grid-template-columns: 1fr 7rem 4.2rem minmax(5rem, auto);
+  gap: .5rem; align-items: center; padding: .3rem 0; border-bottom: 1px dashed var(--line);
+}
+.logrow:last-of-type { border-bottom: none; }
+.logrow label { color: var(--ink); font-size: .95rem; }
+ol { margin: .3rem 0 .2rem 1.2rem; padding: 0; }
+ol li { margin: .25rem 0; }

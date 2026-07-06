@@ -1,17 +1,19 @@
 // main.js — router, header status, screen mounting.
-// Unit 3 ships the frame + live status; screens land in Units 4–9.
+// ?demo=1 runs the whole app against bundled fixtures (no token, no network).
 
 import { connect } from "./setup.js";
 import { classifyCommit, ageString } from "./model.js";
+import { renderToday } from "./today.js";
 
 const SCREENS = {
-  today:  { title: "Today",  unit: "Unit 4" },
+  today:  { title: "Today",  render: renderToday },
   inbox:  { title: "Inbox",  unit: "Unit 5" },
   board:  { title: "Board",  unit: "Unit 6" },
   review: { title: "Review", unit: "Units 7–8, 10" },
   trends: { title: "Trends", unit: "Unit 9" },
 };
 
+const DEMO = new URLSearchParams(location.search).has("demo");
 let gh;
 
 function currentTab() {
@@ -32,41 +34,37 @@ async function renderScreen() {
   const view = document.getElementById("view");
   view.replaceChildren();
 
-  const card = document.createElement("div");
-  card.className = "card";
-  const h = document.createElement("h2");
-  h.textContent = SCREENS[tab].title;
-  const p = document.createElement("p");
-  p.className = "muted";
-  p.textContent = `This screen arrives in ${SCREENS[tab].unit}. The foundation under it — auth, atomic writes, live repo reads — is running now (see header status).`;
-  card.append(h, p);
-  view.append(card);
+  if (DEMO && tab === "today") {
+    const note = document.createElement("p");
+    note.className = "muted";
+    note.textContent = "▦ demo data — nothing here is real and nothing is written to GitHub";
+    view.append(note);
+  }
 
-  if (tab === "today") {
-    // Foundation proof: live read of the compiled brief, so the frame is useful on day one.
+  const screen = SCREENS[tab];
+  if (screen.render) {
+    const mount = document.createElement("div");
+    view.append(mount);
     try {
-      const { entries } = await gh.tree();
-      const briefs = [...entries.keys()].filter((p) => /^Plans\/Daily\/.*-Brief\.md$/.test(p)).sort();
-      if (briefs.length) {
-        const text = await gh.readFile(briefs[briefs.length - 1]);
-        const pre = document.createElement("div");
-        pre.className = "card";
-        const title = document.createElement("h2");
-        title.textContent = "Latest compiled brief (live from the repo)";
-        const body = document.createElement("pre");
-        body.style.whiteSpace = "pre-wrap";
-        body.style.font = "inherit";
-        body.textContent = text; // textContent only — never innerHTML
-        pre.append(title, body);
-        view.append(pre);
-      }
+      await screen.render(gh, mount);
     } catch (e) {
       const err = document.createElement("p");
       err.className = "err";
-      err.textContent = `Read failed: ${e.message}`;
-      view.append(err);
+      err.textContent = `${screen.title} failed to load: ${e.message}`;
+      mount.append(err);
     }
+    return;
   }
+
+  const card = document.createElement("div");
+  card.className = "card";
+  const h = document.createElement("h2");
+  h.textContent = screen.title;
+  const p = document.createElement("p");
+  p.className = "muted";
+  p.textContent = `This screen arrives in ${screen.unit}.`;
+  card.append(h, p);
+  view.append(card);
 }
 
 async function renderStatus() {
@@ -98,7 +96,6 @@ async function renderStatus() {
     if (run && run.conclusion === "failure") {
       el.append(Object.assign(document.createElement("span"), { textContent: " ✗ workflow failed", className: "failed" }));
     }
-    // inbox badge from live tree
     const pending = [...entries.keys()].filter((p) => /^Ledger\/Inbox\/(?!_)/.test(p)).length;
     const badge = document.getElementById("inbox-badge");
     badge.hidden = pending === 0;
@@ -109,7 +106,12 @@ async function renderStatus() {
 }
 
 async function boot() {
-  gh = await connect();
+  if (DEMO) {
+    const { FakeGitHub } = await import("./fixtures.js");
+    gh = new FakeGitHub();
+  } else {
+    gh = await connect();
+  }
   await renderScreen();
   await renderStatus();
   setInterval(renderStatus, 90_000); // ETag-cached — 304s are free

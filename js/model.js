@@ -351,12 +351,20 @@ export function buildWeeklyPlan(state, status) {
 export function parseWeeklyPlan(text) {
   const fm = parseFrontmatter(text);
   const [year, week] = (fm.week || "-W").split("-W");
-  const section = (heading, next) => {
+  const allHeadings = Object.values(WIZ_SECTIONS);
+  // A section runs to the NEAREST following known heading that is actually
+  // present, so partial AI files (missing sections) still parse correctly.
+  const section = (heading) => {
     const start = text.indexOf(heading);
     if (start < 0) return "";
     const from = start + heading.length;
-    const end = next ? text.indexOf(next, from) : text.length;
-    return text.slice(from, end < 0 ? text.length : end).trim();
+    let end = text.length;
+    for (const h of allHeadings) {
+      if (h === heading) continue;
+      const i = text.indexOf(h, from);
+      if (i >= 0 && i < end) end = i;
+    }
+    return text.slice(from, end).trim();
   };
   const bullets = (s) => s.split("\n").map((l) => l.replace(/^\s*-\s?/, "").trim())
     .filter((l) => l !== "");
@@ -410,6 +418,21 @@ export function buildWeeklyCommit(state, decisions, files, today) {
     changes,
     deletions: [weeklyDraftPath(state.target)],
   };
+}
+
+export function weeklyAIPath(target) {
+  return weeklyDraftPath(target).replace(/\.md$/, "-ai.md");
+}
+
+// Append b's items to a, skipping ones already present (case/space-insensitive).
+export function mergeLines(a, b) {
+  const seen = new Set(a.map((x) => x.trim().toLowerCase()));
+  const out = [...a];
+  for (const x of b) {
+    const k = x.trim().toLowerCase();
+    if (k && !seen.has(k)) { seen.add(k); out.push(x); }
+  }
+  return out;
 }
 
 // ---------- inbox proposals ----------

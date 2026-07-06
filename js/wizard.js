@@ -9,10 +9,10 @@
 
 import {
   todayIST, isoWeek, reviewTargetWeek, mondayOfISOWeek, windowLabel,
-  weeklyDraftPath, weeklyFinalPath, parseCommitment, parseWeeklyPlan,
+  weeklyDraftPath, weeklyFinalPath, weeklyAIPath, mergeLines, parseCommitment, parseWeeklyPlan,
   buildWeeklyDraft, buildWeeklyCommit, WD, daysBetween,
-} from "./model.js?v=3";
-import { AuthError } from "./github.js?v=3";
+} from "./model.js?v=4";
+import { AuthError } from "./github.js?v=4";
 
 const STEPS = ["Celebrate", "Analyze misses", "Top outcomes", "Schedule", "Theme & truth", "Carry decisions"];
 
@@ -40,9 +40,50 @@ export async function renderReview(gh, view, cadence = "weekly") {
   state.target = target;
   state.rocks = rocks.map((r) => r.id);
   const decisions = {}; // id -> {action, gate?, note?, reason?}
+  const weekStr = `${target.year}-W${String(target.week).padStart(2, "0")}`;
 
   let step = 0;
   const busy = { on: false };
+  let ai = null;          // {celebrate, misses, truth}
+  let aiState = "idle";   // idle | running | ready | failed
+  let aiMsg = "";
+  const mergedFrom = { celebrate: false, misses: false };
+
+  // If a prior run already produced a candidate, pick it up on load.
+  if (entries.has(weeklyAIPath(target))) {
+    try { const p = parseWeeklyPlan(await gh.readFile(weeklyAIPath(target)));
+      ai = { celebrate: p.celebrate, misses: p.misses, truth: p.truth }; aiState = "ready";
+    } catch { /* ignore */ }
+  }
+
+  const draftWithAI = async () => {
+    if (aiState === "running") return;
+    aiState = "running"; aiMsg = "asking the reviewer to draft from your journal…"; render();
+    try {
+      await gh.dispatchWorkflow("reviewer.yml", { week: weekStr });
+    } catch (e) {
+      aiState = "failed"; aiMsg = e instanceof AuthError
+        ? "token lacks Actions permission — draft manually, or re-auth."
+        : `couldn't start the draft (${e.message}).`;
+      render(); return;
+    }
+    const path = weeklyAIPath(target);
+    const start = Date.now();
+    while (Date.now() - start < 150000) { // ~2.5 min budget
+      await new Promise((r) => setTimeout(r, 5000));
+      let has = false;
+      try { has = (await gh.tree()).entries.has(path); } catch { /* transient */ }
+      if (has) {
+        const p = parseWeeklyPlan(await gh.readFile(path));
+        ai = { celebrate: p.celebrate, misses: p.misses, truth: p.truth };
+        aiState = "ready"; aiMsg = "draft ready — merge what's useful."; render(); return;
+      }
+    }
+    const run = await gh.latestRun().catch(() => null);
+    aiState = "failed";
+    aiMsg = run?.conclusion === "failure" ? "the draft run failed — continue manually." : "timed out — continue manually.";
+    render();
+  };
 
   const el = (tag, cls, text) => {
     const n = document.createElement(tag);
@@ -97,6 +138,16 @@ export async function renderReview(gh, view, cadence = "weekly") {
       pips.append(p);
     });
     head.append(pips);
+    // Draft-with-AI control
+    const aiRow = el("div", "floors");
+    aiRow.style.marginTop = ".5rem";
+    const aiBtn = el("button", null, aiState === "running" ? "✨ drafting…" : ai ? "✨ Re-draft with AI" : "✨ Draft with AI");
+    aiBtn.disabled = aiState === "running";
+    aiBtn.title = "Fires the reviewer agent to draft celebrate / misses / a candidate truth from your journal.";
+    aiBtn.addEventListener("click", draftWithAI);
+    aiRow.append(aiBtn);
+    if (aiMsg) aiRow.append(el("span", aiState === "failed" ? "err" : "muted", aiMsg));
+    head.append(aiRow);
     view.append(head);
 
     const body = el("div", "card");
@@ -139,7 +190,7 @@ export async function renderReview(gh, view, cadence = "weekly") {
   }
 
   // ---- step renderers ----
-  const listStep = (body, el, key, heading, help, ordered) => {
+  const listStep = (body, el, key, heading, help) => {
     body.append(el("h3", null, heading));
     body.append(el("p", "muted", help));
     const ta = el("textarea");
@@ -148,6 +199,24 @@ export async function renderReview(gh, view, cadence = "weekly") {
     ta.placeholder = "one per line…";
     ta.addEventListener("input", () => { state[key] = ta.value.split("\n").map((s) => s.trim()).filter(Boolean); });
     body.append(ta);
+    // AI merge affordance (celebrate / misses only)
+    if (ai && Array.isArray(ai[key]) && ai[key].length) {
+      const row = el("div", "floors");
+      const btn = el("button", "primary", `✨ Merge ${ai[key].length} AI suggestion(s)`);
+      btn.addEventListener("click", () => {
+        state[key] = mergeLines(state[key], ai[key]);
+        ta.value = state[key].join("\n");
+        mergedFrom[key] = true;
+        btn.disabled = true; btn.textContent = "✓ merged — edit above";
+      });
+      if (mergedFrom[key]) { btn.disabled = true; btn.textContent = "✓ merged"; }
+      row.append(btn);
+      body.append(row);
+      const preview = el("details");
+      preview.append(el("summary", "muted", "peek at the AI candidate"));
+      for (const line of ai[key]) preview.append(el("p", "muted", `• ${line}`));
+      body.append(preview);
+    }
   };
 
   const STEP_RENDERERS = [
@@ -185,6 +254,12 @@ export async function renderReview(gh, view, cadence = "weekly") {
       t2.value = state.truth || "";
       t2.addEventListener("input", () => { state.truth = t2.value.trim(); });
       body.append(el("label", "muted", "🪞 Uncomfortable truth"), t2);
+      if (ai?.truth) {
+        const insp = el("details");
+        insp.append(el("summary", "muted", "✨ AI candidate truth (inspiration — write your own)"));
+        insp.append(el("p", "muted", ai.truth));
+        body.append(insp);
+      }
     },
     (body, el) => {
       body.append(el("h3", null, "Carry decisions"));

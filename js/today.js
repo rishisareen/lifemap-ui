@@ -6,8 +6,8 @@ import {
   todayIST, isoWeek, parseFrontmatter, parseCommitment, parseFloors, floorKind,
   weeklyPlanCandidates, todaysMits, gateChips, buildMetricCommit, todaysLoggedValues,
   validateMetric, journalPath, METRIC_FILES, fmtDays, daysBetween,
-} from "./model.js?v=3";
-import { AuthError, stashPending, takePending } from "./github.js?v=3";
+} from "./model.js?v=4";
+import { AuthError, stashPending, takePending } from "./github.js?v=4";
 
 const FLUSH_MS = 8000;
 const UNITS = { weight: "kg", steps: "steps", protein: "g", sleep_quality: "/5" };

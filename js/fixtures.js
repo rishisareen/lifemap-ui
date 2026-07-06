@@ -197,5 +197,25 @@ export class FakeGitHub {
     ];
   }
   async latestRun() { return { name: "lifemap", status: "completed", conclusion: "success", at: new Date().toISOString() }; }
-  async dispatchWorkflow() {}
+  async dispatchWorkflow(file, inputs = {}) {
+    // Demo only: simulate the reviewer agent producing a candidate ~2s later.
+    if (file === "reviewer.yml" && inputs.week) {
+      const w = inputs.week.split("-W");
+      const path = `Plans/_drafts/${w[0]} - Weekly Plan - W${w[1]}-ai.md`;
+      setTimeout(() => {
+        this.files[path] = [
+          "---", `week: ${inputs.week}`, "status: ai-draft", "---", "",
+          "## STEP THREE : CELEBRATE LAST WEEK", "",
+          "- [relations] Full house all week — “most lovely feeling” (Jul 3)",
+          "- [office] Inbox pulled back under control after the Japan backlog",
+          "- [wellness] Mobility + gym intentions returning post-trip", "",
+          "## STEP FOUR : ANALYZE WHAT DIDN'T HAPPEN", "",
+          "- [relations] Bihar still unbooked — the 6-month carry",
+          "- [wellness] Routine still recovering; physio gates the real restart", "",
+          "## 🪞 One Uncomfortable Truth", "",
+          "You've booked Bihar in your head six times. The only thing that counts this week is a payment confirmation.", "",
+        ].join("\n");
+      }, 2000);
+    }
+  }
 }

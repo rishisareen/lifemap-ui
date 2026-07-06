@@ -127,3 +127,29 @@ test("buildWeeklyDraft: single-file draft write, status draft, no deletions", ()
   assert.match(op.changes[0].text, /status: draft/);
   assert.deepEqual(op.deletions, []);
 });
+
+// ---- Unit 8: AI draft ----
+
+test("weeklyAIPath sits beside the draft with an -ai suffix", () => {
+  assert.equal(M.weeklyAIPath({ year: 2026, week: 29 }), "Plans/_drafts/2026 - Weekly Plan - W29-ai.md");
+});
+
+test("parseWeeklyPlan reads a partial AI file (celebrate/misses/truth only)", () => {
+  const ai = [
+    "---", "week: 2026-W29", "status: ai-draft", "---", "",
+    "## STEP THREE : CELEBRATE LAST WEEK", "", "- Full house all week", "- Inbox back under control", "",
+    "## STEP FOUR : ANALYZE WHAT DIDN'T HAPPEN", "", "- Bihar still unbooked (carry 6)", "",
+    "## 🪞 One Uncomfortable Truth", "", "You have booked Bihar in your head six times.", "",
+  ].join("\n");
+  const s = M.parseWeeklyPlan(ai);
+  assert.deepEqual(s.celebrate, ["Full house all week", "Inbox back under control"]);
+  assert.deepEqual(s.misses, ["Bihar still unbooked (carry 6)"]);
+  assert.match(s.truth, /booked Bihar in your head six times/);
+  assert.deepEqual(s.outcomes, []); // absent section -> empty
+});
+
+test("mergeLines appends only new lines, preserving order and deduping", () => {
+  assert.deepEqual(M.mergeLines(["a", "b"], ["b", "c"]), ["a", "b", "c"]);
+  assert.deepEqual(M.mergeLines([], ["x"]), ["x"]);
+  assert.deepEqual(M.mergeLines(["x"], []), ["x"]);
+});

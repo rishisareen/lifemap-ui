@@ -1,11 +1,11 @@
 // main.js — router, header status, screen mounting.
 // ?demo=1 runs the whole app against bundled fixtures (no token, no network).
 
-import { connect } from "./setup.js";
-import { classifyCommit, ageString } from "./model.js";
-import { renderToday } from "./today.js";
-import { renderInbox } from "./inbox.js";
-import { renderBoard } from "./board.js";
+import { connect } from "./setup.js?v=1";
+import { classifyCommit, ageString } from "./model.js?v=1";
+import { renderToday } from "./today.js?v=1";
+import { renderInbox } from "./inbox.js?v=1";
+import { renderBoard } from "./board.js?v=1";
 
 const SCREENS = {
   today:  { title: "Today",  render: renderToday },
@@ -109,7 +109,7 @@ async function renderStatus() {
 
 async function boot() {
   if (DEMO) {
-    const { FakeGitHub } = await import("./fixtures.js");
+    const { FakeGitHub } = await import("./fixtures.js?v=1");
     gh = new FakeGitHub();
   } else {
     gh = await connect();

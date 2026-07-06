@@ -13,3 +13,11 @@ Static planning UI for a private LifeMap repo. **This repo contains code only â€
 
 Hosted via GitHub Pages. Design/plan: `docs/plans/2026-07-06-001-feat-lifemap-ui-plan.md`
 in the data repo.
+
+## Deploying
+
+Run `./release.sh` before committing a deploy. It bumps `.version` and stamps
+`?v=N` onto every internal module URL (static + dynamic imports, entrypoint,
+CSS), so a GitHub Pages deploy's module graph is always self-consistent â€” no
+window where a fresh `main.js` loads a stale cached `model.js`. `node --test`
+resolves the query strings transparently.

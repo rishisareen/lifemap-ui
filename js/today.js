@@ -8,14 +8,14 @@ import {
   validateMetric, journalPath, METRIC_FILES, UNITS,
   dayPlanPath, parseDayPlan, extractJournalToday3, diffToday3, summarizeDiff,
   parseBusyCsv, ageString,
-} from "./model.js?v=11";
-import { AuthError, stashPending, takePending } from "./github.js?v=11";
+} from "./model.js?v=12";
+import { AuthError, stashPending, takePending } from "./github.js?v=12";
 
 const FLUSH_MS = 8000;
 
 export async function renderToday(gh, view) {
   const today = todayIST();
-  const { entries } = await gh.tree();
+  const { entries, headOid } = await gh.tree();
   const paths = [...entries.keys()];
 
   // -- gather raw files --
@@ -25,7 +25,7 @@ export async function renderToday(gh, view) {
   const files = await gh.readFiles([
     "Ledger/habits.md", ...commitmentPaths, ...Object.values(METRIC_FILES),
     dayPlanFilePath, journalPath(today), BUSY_PATH,
-  ]);
+  ], headOid, { tolerant: true });
   const commitments = commitmentPaths.map((p) => parseCommitment(files[p] ?? "")).filter((c) => c.id);
   const active = commitments.filter((c) => c.state === "active" || c.state === "committed");
   const floors = parseFloors(files["Ledger/habits.md"] ?? "");

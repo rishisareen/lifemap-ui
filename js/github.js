@@ -4,7 +4,7 @@
 // on expectedHeadOid, with semantic re-apply retry. Every path passes the
 // journal guard. In-flight writes persist to localStorage until confirmed.
 
-import { assertNotJournalPath } from "./model.js?v=11";
+import { assertNotJournalPath } from "./model.js?v=12";
 
 const API = "https://api.github.com";
 
@@ -115,12 +115,26 @@ export class GitHub {
     return text;
   }
 
-  async readFiles(paths, head) {
+  // tolerant: true lets one blob fetch that genuinely FAILS (network error,
+  // non-2xx) degrade to "missing" — same as a path absent from the tree —
+  // instead of rejecting the whole batch. Screens reading for display want
+  // this (every caller already treats a missing key as "no data yet"), but
+  // it defaults to false: commitOp's own reads must stay strict, since
+  // silently building a write from an incomplete batch is how one flaky
+  // metric-CSV fetch would turn into "overwrite history with an empty file".
+  async readFiles(paths, head, { tolerant = false } = {}) {
     const out = {};
-    await Promise.all(paths.map(async (p) => {
-      const t = await this.readFile(p, head);
-      if (t !== null) out[p] = t;
-    }));
+    if (!tolerant) {
+      await Promise.all(paths.map(async (p) => {
+        const t = await this.readFile(p, head);
+        if (t !== null) out[p] = t;
+      }));
+      return out;
+    }
+    const results = await Promise.allSettled(paths.map((p) => this.readFile(p, head)));
+    results.forEach((r, i) => {
+      if (r.status === "fulfilled" && r.value !== null) out[paths[i]] = r.value;
+    });
     return out;
   }
 

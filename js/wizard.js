@@ -11,8 +11,8 @@ import {
   todayIST, isoWeek, reviewTargetWeek, mondayOfISOWeek, windowLabel,
   weeklyDraftPath, weeklyFinalPath, weeklyAIPath, mergeLines, parseCommitment, parseWeeklyPlan,
   buildWeeklyDraft, buildWeeklyCommit, WD, daysBetween, parseInlineMarkdown,
-} from "./model.js?v=11";
-import { AuthError } from "./github.js?v=11";
+} from "./model.js?v=12";
+import { AuthError } from "./github.js?v=12";
 
 const STEPS = ["Celebrate", "Analyze misses", "Top outcomes", "Schedule", "Theme & truth", "Carry decisions"];
 
@@ -24,10 +24,10 @@ export async function renderReview(gh, view, cadence = "weekly") {
   const draftPath = weeklyDraftPath(target);
   const finalPath = weeklyFinalPath(target);
 
-  const { entries } = await gh.tree();
+  const { entries, headOid } = await gh.tree();
   const commitmentPaths = [...entries.keys()].filter((p) => /^Ledger\/Commitments\/.+\.md$/.test(p));
   const need = [draftPath, finalPath, ...commitmentPaths];
-  const files = await gh.readFiles(need.filter((p) => entries.has(p)));
+  const files = await gh.readFiles(need.filter((p) => entries.has(p)), headOid, { tolerant: true });
   const commitments = commitmentPaths.map((p) => ({ path: p, ...parseCommitment(files[p] ?? "") })).filter((c) => c.id);
   const rocks = commitments.filter((c) => c.isRock && (c.state === "active" || c.state === "committed"));
   const carryAlerts = commitments.filter((c) => c.carryCount >= 3 && (c.state === "active" || c.state === "committed"));

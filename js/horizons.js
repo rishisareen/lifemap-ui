@@ -7,14 +7,14 @@ import {
   todayIST, parseCommitment, parseCSV, quarterRocks, thisMonthGates, annualGoals,
   metricReadout, quarterOf, reviewPath, blobUrl, daysBetween, fmtDays, truncate,
   gateUrgencyClass, METRIC_FILES, UNITS,
-} from "./model.js?v=11";
+} from "./model.js?v=12";
 
 export async function renderHorizons(gh, view) {
   const today = todayIST();
-  const { entries } = await gh.tree();
+  const { entries, headOid } = await gh.tree();
   const commitmentPaths = [...entries.keys()].filter((p) => /^Ledger\/Commitments\/.+\.md$/.test(p));
 
-  const files = await gh.readFiles([...commitmentPaths, ...Object.values(METRIC_FILES)]);
+  const files = await gh.readFiles([...commitmentPaths, ...Object.values(METRIC_FILES)], headOid, { tolerant: true });
   const commitments = commitmentPaths.map((p) => parseCommitment(files[p] ?? "")).filter((c) => c.id);
   // Map, not a plain object: target_metric is free-text frontmatter, and a
   // value like "__proto__" or "constructor" would otherwise resolve through

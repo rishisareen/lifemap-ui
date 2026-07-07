@@ -6,12 +6,12 @@
 
 import {
   todayIST, parseProposal, proposalSummary, buildInboxCommit, PROPOSAL_TYPES, METRIC_FILES, slugify, blobUrl,
-} from "./model.js?v=11";
-import { AuthError } from "./github.js?v=11";
+} from "./model.js?v=12";
+import { AuthError } from "./github.js?v=12";
 
 export async function renderInbox(gh, view) {
   const today = todayIST();
-  const { entries } = await gh.tree();
+  const { entries, headOid } = await gh.tree();
   const proposalPaths = [...entries.keys()]
     .filter((p) => /^Ledger\/Inbox\/[^_][^/]*\.md$/.test(p)).sort();
 
@@ -34,7 +34,7 @@ export async function renderInbox(gh, view) {
     `${proposalPaths.length} proposal(s) from your journal. ✓ applies to the Ledger, ✗ discards — either way it never comes back.`));
   view.append(head);
 
-  const texts = await gh.readFiles(proposalPaths);
+  const texts = await gh.readFiles(proposalPaths, headOid, { tolerant: true });
   const proposals = proposalPaths.map((p) => parseProposal(p, texts[p] ?? ""));
   const busy = { on: false };
 

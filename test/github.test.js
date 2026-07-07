@@ -20,8 +20,8 @@ test("b64encode is unicode-safe", () => {
 // createCommitOnBranch only when expectedHeadOid matches. With refLag > 0 the
 // REST ref endpoint keeps reporting the PREVIOUS head for that many reads after
 // a commit — GitHub's real read-after-write lag between GraphQL and REST.
-function fakeBackend(files, { refLag = 0 } = {}) {
-  const state = { head: "aaa", refHead: "aaa", lagReads: 0, files: { ...files }, commits: [] };
+function fakeBackend(files, { refLag = 0, failPaths = new Set() } = {}) {
+  const state = { head: "aaa", refHead: "aaa", lagReads: 0, files: { ...files }, commits: [], graphqlCalls: 0 };
   const fetchFn = async (url, opts = {}) => {
     const body = opts.body ? JSON.parse(opts.body) : null;
     const json = (data, status = 200, headers = {}) => ({
@@ -31,6 +31,7 @@ function fakeBackend(files, { refLag = 0 } = {}) {
     });
     if (url.endsWith("/graphql")) {
       if (!body.variables.input) {
+        state.graphqlCalls++; // counts headOid() queries specifically (the ref-oid query)
         // ref-oid query: GraphQL is consistent with its own writes (no lag).
         return json({ data: { repository: { ref: { target: { oid: state.head } } } } });
       }
@@ -61,11 +62,68 @@ function fakeBackend(files, { refLag = 0 } = {}) {
         200, { etag });
     }
     const blob = /\/git\/blobs\/sha-(.+?)-/.exec(url);
-    if (blob) return json(state.files[decodeURIComponent(blob[1])] ?? "");
+    if (blob) {
+      const path = decodeURIComponent(blob[1]);
+      if (failPaths.has(path)) return json({ message: "simulated transient failure" }, 500);
+      return json(state.files[path] ?? "");
+    }
     return json({}, 404);
   };
   return { state, fetchFn };
 }
+
+// ---------- readFiles: per-file failure isolation ----------
+
+test("readFiles: default (strict) — one failed blob fetch rejects the whole batch", async () => {
+  const { fetchFn } = fakeBackend(
+    { "a.md": "A\n", "b.md": "B\n", "c.md": "C\n" },
+    { failPaths: new Set(["b.md"]) });
+  const gh = new GitHub({ token: "t", fetchFn });
+  await assert.rejects(gh.readFiles(["a.md", "b.md", "c.md"]), /read b\.md failed \(500\)/);
+});
+
+test("readFiles: tolerant — one failed blob fetch degrades to missing, the rest still return", async () => {
+  const { fetchFn } = fakeBackend(
+    { "a.md": "A\n", "b.md": "B\n", "c.md": "C\n" },
+    { failPaths: new Set(["b.md"]) });
+  const gh = new GitHub({ token: "t", fetchFn });
+  const files = await gh.readFiles(["a.md", "b.md", "c.md"], undefined, { tolerant: true });
+  assert.deepEqual(files, { "a.md": "A\n", "c.md": "C\n" }); // b.md silently absent, not thrown
+});
+
+test("readFiles: tolerant mode treats a genuinely-missing path the same as a failed one", async () => {
+  const { fetchFn } = fakeBackend({ "a.md": "A\n" });
+  const gh = new GitHub({ token: "t", fetchFn });
+  const files = await gh.readFiles(["a.md", "nope.md"], undefined, { tolerant: true });
+  assert.deepEqual(files, { "a.md": "A\n" });
+});
+
+test("commitOp's own reads stay strict even though readFiles supports tolerant mode", async () => {
+  // Regression guard: commitOp must NEVER silently build a write from a batch
+  // with a missing read — that's how a failed metric-CSV fetch would turn into
+  // "overwrite history with an empty file". commitOp doesn't opt into tolerant
+  // mode, so this must still reject exactly like the strict-mode test above.
+  const { fetchFn } = fakeBackend(
+    { "Ledger/Metrics/weight.csv": "date,value,source,note\n2026-07-01,85,ui,\n" },
+    { failPaths: new Set(["Ledger/Metrics/weight.csv"]) });
+  const gh = new GitHub({ token: "t", fetchFn });
+  await assert.rejects(
+    gh.commitOp(async (files) => ({
+      message: "ui: log weight",
+      changes: [{ path: "Ledger/Metrics/weight.csv", text: files["Ledger/Metrics/weight.csv"] + "2026-07-07,84.6,ui,\n" }],
+      deletions: [],
+    }), { reads: ["Ledger/Metrics/weight.csv"] }),
+    /read Ledger\/Metrics\/weight\.csv failed \(500\)/);
+});
+
+test("readFiles: passing an already-known head avoids a redundant headOid() call per path", async () => {
+  const { state, fetchFn } = fakeBackend({ "a.md": "A\n", "b.md": "B\n", "c.md": "C\n" });
+  const gh = new GitHub({ token: "t", fetchFn });
+  const head = await gh.headOid();
+  state.graphqlCalls = 0; // reset after the explicit warm-up read
+  await gh.readFiles(["a.md", "b.md", "c.md"], head, { tolerant: true });
+  assert.equal(state.graphqlCalls, 0); // head already known — no per-path headOid() fan-out
+});
 
 test("commitOp: happy path commits changes + deletions atomically", async () => {
   const { state, fetchFn } = fakeBackend({ "Ledger/Metrics/weight.csv": "date,value,source,note\n" });

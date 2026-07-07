@@ -7,8 +7,8 @@
 import {
   todayIST, parseCommitment, boardColumn, transition, reschedule, rockBudgetBlocks,
   newIdeaFile, fmtDays, daysBetween
-} from "./model.js?v=11";
-import { AuthError } from "./github.js?v=11";
+} from "./model.js?v=12";
+import { AuthError } from "./github.js?v=12";
 
 const COLUMNS = [
   ["ideas", "Ideas"], ["committed", "Committed"], ["active", "Active"], ["closed", "Closed"],
@@ -17,10 +17,10 @@ const PILLARS = ["wellness", "finance", "relationships", "joy", "mind", "travel"
 
 export async function renderBoard(gh, view) {
   const today = todayIST();
-  const { entries } = await gh.tree();
+  const { entries, headOid } = await gh.tree();
   const paths = [...entries.keys()].filter((p) => /^Ledger\/Commitments\/.+\.md$/.test(p));
   const archivePaths = [...entries.keys()].filter((p) => /^Archive\/Commitments\/.+\.md$/.test(p));
-  const files = await gh.readFiles([...paths, ...archivePaths]);
+  const files = await gh.readFiles([...paths, ...archivePaths], headOid, { tolerant: true });
   const commitments = paths.map((p) => ({ path: p, ...parseCommitment(files[p] ?? "") })).filter((c) => c.id);
   const archived = archivePaths.map((p) => ({ path: p, ...parseCommitment(files[p] ?? "") })).filter((c) => c.id);
   const existingPaths = new Set([...paths, ...archivePaths]);

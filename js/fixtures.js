@@ -166,6 +166,36 @@ payload_text: "Presence beats productivity when family is in the house"
 
 **Notes:** Borderline — accept only if it belongs in the annual lessons file.`,
   [`Daily Journal/${Y}/${String(Mn).padStart(2, "0")} (${MONS[Mn - 1]})/${String(D).padStart(2, "0")}-${MONS[Mn - 1]}.md`]: "### demo journal entry\n",
+  [`Plans/Daily/${Y}/${String(Mn).padStart(2, "0")}/${String(D).padStart(2, "0")}-Plan.md`]: `---
+date: ${TODAY_FIX}
+generated_by: agent
+generated_at: ${TODAY_FIX}T04:15:00+05:30
+---
+
+## Today's 3
+<!-- today3-start -->
+1. Call Mom, lock Bihar dates [relationships] ⟨commitment:bihar-trip-mom⟩
+2. Swim / walk (back-safe) [wellness] ⟨carry⟩
+3. Office to steady state [office] ⟨weekly⟩
+<!-- today3-end -->
+
+## Yesterday
+- slipped — Call Mom, lock Bihar dates
+- done — Draft the thesis outline
+
+## Context
+Two carries from yesterday; the swim/walk block avoids your 10am block.
+
+## Schedule
+- 09:00–09:30 [relationships] Call Mom, lock Bihar dates
+- 17:00–18:00 [wellness] Swim / walk (back-safe)
+`,
+  "Plans/Calendar/busy-14d.csv": `# fetched_at: ${TODAY_FIX}T04:15:00+05:30
+# status: ok
+start,end,all_day
+${TODAY_FIX}T10:00:00+05:30,${TODAY_FIX}T11:00:00+05:30,0
+${TODAY_FIX}T15:00:00+05:30,${TODAY_FIX}T16:00:00+05:30,0
+`,
 };
 
 export class FakeGitHub {

@@ -3,11 +3,13 @@
 // Metric logging batches into ONE commit per screen-session (~8s debounce).
 
 import {
-  todayIST, isoWeek, parseFrontmatter, parseCommitment, parseFloors, floorKind,
-  weeklyPlanCandidates, todaysMits, gateChips, buildMetricCommit, todaysLoggedValues,
-  validateMetric, journalPath, METRIC_FILES, fmtDays, daysBetween,
-} from "./model.js?v=7";
-import { AuthError, stashPending, takePending } from "./github.js?v=7";
+  todayIST, parseCommitment, parseFloors, floorKind,
+  gateChips, buildMetricCommit, todaysLoggedValues,
+  validateMetric, journalPath, METRIC_FILES,
+  dayPlanPath, parseDayPlan, extractJournalToday3, diffToday3, summarizeDiff,
+  parseBusyCsv, ageString,
+} from "./model.js?v=8";
+import { AuthError, stashPending, takePending } from "./github.js?v=8";
 
 const FLUSH_MS = 8000;
 const UNITS = { weight: "kg", steps: "steps", protein: "g", sleep_quality: "/5" };
@@ -19,25 +21,17 @@ export async function renderToday(gh, view) {
 
   // -- gather raw files --
   const commitmentPaths = paths.filter((p) => /^Ledger\/Commitments\/.+\.md$/.test(p));
+  const BUSY_PATH = "Plans/Calendar/busy-14d.csv";
+  const dayPlanFilePath = dayPlanPath(today);
   const files = await gh.readFiles([
     "Ledger/habits.md", ...commitmentPaths, ...Object.values(METRIC_FILES),
+    dayPlanFilePath, journalPath(today), BUSY_PATH,
   ]);
   const commitments = commitmentPaths.map((p) => parseCommitment(files[p] ?? "")).filter((c) => c.id);
   const active = commitments.filter((c) => c.state === "active" || c.state === "committed");
   const floors = parseFloors(files["Ledger/habits.md"] ?? "");
   const logged = todaysLoggedValues(files, today);
   const journalToday = entries.has(journalPath(today));
-
-  // -- weekly plan (skip drafts, fall back to earlier weeks) --
-  const iso = isoWeek(today);
-  let planWeek = null, planText = null;
-  for (const cand of weeklyPlanCandidates(paths, iso)) {
-    const text = await gh.readFile(cand.path);
-    if (parseFrontmatter(text).status === "draft") continue;
-    planWeek = cand.week; planText = text;
-    break;
-  }
-  const mits = planText ? todaysMits(planText, today) : [];
 
   view.replaceChildren();
   const el = (tag, cls, text) => {
@@ -47,22 +41,79 @@ export async function renderToday(gh, view) {
     return n;
   };
 
-  // ---- Today's 3 ----
-  const mitCard = el("div", "card");
-  mitCard.append(el("h2", null, "Today's 3"));
-  if (planWeek !== null && planWeek !== iso.week) {
-    mitCard.append(el("p", "muted", `No committed plan for W${iso.week} yet — showing W${planWeek}.`));
+  // ---- Day plan (absorbs the legacy weekly-MIT card — Unit 8) ----
+  const dayPlanCard = el("div", "card");
+  dayPlanCard.append(el("h2", null, "Day plan"));
+  const dayPlanText = files[dayPlanFilePath] ?? null;
+  if (dayPlanText == null) {
+    dayPlanCard.append(el("p", "muted", "Plan not generated yet."));
+  } else {
+    const plan = parseDayPlan(dayPlanText);
+    if (plan.error) {
+      dayPlanCard.append(el("p", "err", `Day plan couldn't be read: ${plan.error}`));
+    } else {
+      if (plan.generatedBy === "fallback") {
+        dayPlanCard.append(el("p", "warn", plan.context)); // echo the plan's own failure line — not new UI copy
+      }
+      const journalText = journalToday ? (files[journalPath(today)] ?? null) : null;
+      const extraction = journalText != null ? extractJournalToday3(journalText) : null;
+
+      if (extraction && extraction.status === "marker") {
+        dayPlanCard.append(el("p", "err", "Plan arrived late — you weren't shown a proposal today."));
+      } else if (extraction && extraction.status === "ok" && extraction.items.length) {
+        const ol = el("ol");
+        for (const it of extraction.items) ol.append(el("li", null, it));
+        dayPlanCard.append(ol);
+        const diff = diffToday3(plan.today3.map((m) => m.text), extraction.items);
+        dayPlanCard.append(el("p", "muted", `proposed: ${summarizeDiff(diff)}`));
+      } else {
+        const ol = el("ol");
+        for (const m of plan.today3) {
+          const li = el("li");
+          li.append(document.createTextNode(`${m.text} `), el("span", "chip muted", m.pillar));
+          ol.append(li);
+        }
+        dayPlanCard.append(ol);
+        dayPlanCard.append(el("p", "muted", "Proposed — edit in your journal."));
+      }
+    }
   }
-  const ol = el("ol");
-  const items = mits.length ? mits
-    : active.filter((c) => c.isRock).map((c) => `[${c.pillar}] next step on: ${c.title}`);
-  if (!mits.length && planWeek !== null) {
-    mitCard.append(el("p", "muted", "No MIT line for today in the weekly plan — derived from rocks:"));
+  view.append(dayPlanCard);
+
+  // ---- Calendar (busy blocks + LifeMap [pillar] Schedule blocks — Unit 8) ----
+  const calCard = el("div", "card");
+  calCard.append(el("h2", null, "Calendar"));
+  const busyText = files[BUSY_PATH] ?? null;
+  if (busyText == null) {
+    calCard.append(el("p", "muted", "Calendar feed not connected yet."));
+  } else {
+    const busy = parseBusyCsv(busyText);
+    const fetchedMs = busy.fetchedAt ? new Date(busy.fetchedAt).getTime() : null;
+    const isStale = busy.status === "failed" || (fetchedMs != null && Date.now() - fetchedMs > 24 * 3600e3);
+    if (isStale) {
+      const age = fetchedMs != null ? ageString(fetchedMs, Date.now()) : "unknown";
+      calCard.append(el("p", "stale", `Calendar feed stale — last updated ${age}.`));
+    } else if (!busy.rows.length) {
+      calCard.append(el("p", "muted", "Free day."));
+    } else {
+      const strip = el("div", "floors");
+      for (const r of busy.rows) {
+        strip.append(el("span", "chip muted", r.allDay ? "all day" : `${r.start.slice(11, 16)}–${r.end.slice(11, 16)}`));
+      }
+      calCard.append(strip);
+    }
   }
-  for (const it of items) ol.append(el("li", null, it));
-  if (!items.length) mitCard.append(el("p", "muted", "Nothing planned — enjoy it or check the Board."));
-  mitCard.append(ol);
-  view.append(mitCard);
+  if (dayPlanText != null) {
+    const plan = parseDayPlan(dayPlanText);
+    if (!plan.error && plan.schedule?.length) {
+      const sched = el("div", "floors");
+      for (const s of plan.schedule) {
+        sched.append(el("span", "chip rock", `${s.start}–${s.end} [${s.pillar}] ${s.label}`));
+      }
+      calCard.append(sched);
+    }
+  }
+  view.append(calCard);
 
   // ---- Log (batched metric entry) ----
   const logCard = el("div", "card");

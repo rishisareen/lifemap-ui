@@ -296,3 +296,39 @@ test("extractJournalToday3: heading absent", () => {
   const text = "### 🗓️ Tue Jul 8 — Daily Journal\n\n## Morning\n\nNo today's-3 heading at all.\n";
   assert.equal(M.extractJournalToday3(text).status, "absent");
 });
+
+// ---------- day plan: diff summary + busy CSV (Unit 8) ----------
+
+test("diffToday3: identical -> all accepted; one reworded -> edited=1", () => {
+  assert.deepEqual(M.diffToday3(["A", "B", "C"], ["A", "B", "C"]), { accepted: 3, edited: 0, dropped: 0, added: 0 });
+  assert.deepEqual(M.diffToday3(["A", "B", "C"], ["A", "B-x", "C"]), { accepted: 2, edited: 1, dropped: 0, added: 0 });
+});
+
+test("diffToday3: dropped and added bullets counted", () => {
+  assert.deepEqual(M.diffToday3(["A", "B", "C"], ["A", "B"]), { accepted: 2, edited: 0, dropped: 1, added: 0 });
+  assert.deepEqual(M.diffToday3(["A", "B", "C"], ["A", "B", "C", "D"]), { accepted: 3, edited: 0, dropped: 0, added: 1 });
+});
+
+test("summarizeDiff: human-readable one-liner", () => {
+  assert.equal(M.summarizeDiff({ accepted: 2, edited: 1, dropped: 0, added: 0 }), "2 kept, 1 edited");
+  assert.equal(M.summarizeDiff({ accepted: 0, edited: 0, dropped: 0, added: 0 }), "no changes");
+});
+
+test("parseBusyCsv: header + rows, all_day flag", () => {
+  const csv = "# fetched_at: 2026-07-08T04:15:00+05:30\n# status: ok\nstart,end,all_day\n"
+    + "2026-07-08T09:00:00+05:30,2026-07-08T10:00:00+05:30,0\n2026-07-15,2026-07-16,1\n";
+  const busy = M.parseBusyCsv(csv);
+  assert.equal(busy.fetchedAt, "2026-07-08T04:15:00+05:30");
+  assert.equal(busy.status, "ok");
+  assert.deepEqual(busy.rows, [
+    { start: "2026-07-08T09:00:00+05:30", end: "2026-07-08T10:00:00+05:30", allDay: false },
+    { start: "2026-07-15", end: "2026-07-16", allDay: true },
+  ]);
+});
+
+test("parseBusyCsv: status failed, empty rows", () => {
+  const csv = "# fetched_at: 2026-07-08T04:15:00+05:30\n# status: failed\nstart,end,all_day\n";
+  const busy = M.parseBusyCsv(csv);
+  assert.equal(busy.status, "failed");
+  assert.deepEqual(busy.rows, []);
+});

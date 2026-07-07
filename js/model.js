@@ -344,6 +344,45 @@ export function extractJournalToday3(text) {
   return { status: "ok", items };
 }
 
+// Positional pairing (mirrors _System/bin/day_plan_diff.py's diff_for_date —
+// same invariant, client-side): compares the plan's proposed MIT texts
+// against the journal's edited bullets index-by-index.
+export function diffToday3(planTexts, journalTexts) {
+  const n = Math.min(planTexts.length, journalTexts.length);
+  let accepted = 0;
+  for (let i = 0; i < n; i++) {
+    if (planTexts[i].trim() === journalTexts[i].trim()) accepted++;
+  }
+  return {
+    accepted, edited: n - accepted,
+    dropped: Math.max(0, planTexts.length - journalTexts.length),
+    added: Math.max(0, journalTexts.length - planTexts.length),
+  };
+}
+
+export function summarizeDiff(d) {
+  const parts = [];
+  if (d.accepted) parts.push(`${d.accepted} kept`);
+  if (d.edited) parts.push(`${d.edited} edited`);
+  if (d.dropped) parts.push(`${d.dropped} dropped`);
+  if (d.added) parts.push(`${d.added} added`);
+  return parts.join(", ") || "no changes";
+}
+
+// ---------- calendar (busy-14d.csv — mirrors _System/bin/calendar_fetch.py) ----------
+
+export function parseBusyCsv(text) {
+  let fetchedAt = null, status = "ok";
+  const dataLines = [];
+  for (const ln of text.split("\n")) {
+    if (ln.startsWith("# fetched_at:")) fetchedAt = ln.slice("# fetched_at:".length).trim();
+    else if (ln.startsWith("# status:")) status = ln.slice("# status:".length).trim();
+    else if (ln.trim()) dataLines.push(ln);
+  }
+  const { rows } = parseCSV(dataLines.join("\n"));
+  return { fetchedAt, status, rows: rows.map((r) => ({ start: r.start, end: r.end, allDay: r.all_day === "1" })) };
+}
+
 export function daysBetween(fromStr, toStr) {
   return Math.round((new Date(toStr + "T12:00Z") - new Date(fromStr + "T12:00Z")) / 864e5);
 }

@@ -1,12 +1,12 @@
 // main.js — router, header status, screen mounting.
 // ?demo=1 runs the whole app against bundled fixtures (no token, no network).
 
-import { connect } from "./setup.js?v=7";
-import { classifyCommit, ageString } from "./model.js?v=7";
-import { renderToday } from "./today.js?v=7";
-import { renderInbox } from "./inbox.js?v=7";
-import { renderBoard } from "./board.js?v=7";
-import { renderReview } from "./wizard.js?v=7";
+import { connect } from "./setup.js?v=8";
+import { classifyCommit, ageString, parseBusyCsv } from "./model.js?v=8";
+import { renderToday } from "./today.js?v=8";
+import { renderInbox } from "./inbox.js?v=8";
+import { renderBoard } from "./board.js?v=8";
+import { renderReview } from "./wizard.js?v=8";
 
 const SCREENS = {
   today:  { title: "Today",  render: renderToday },
@@ -99,6 +99,16 @@ async function renderStatus() {
     if (run && run.conclusion === "failure") {
       el.append(Object.assign(document.createElement("span"), { textContent: " ✗ workflow failed", className: "failed" }));
     }
+    const busyPath = "Plans/Calendar/busy-14d.csv";
+    if (entries.has(busyPath)) {
+      const busy = parseBusyCsv(await gh.readFile(busyPath));
+      const fetchedMs = busy.fetchedAt ? new Date(busy.fetchedAt).getTime() : null;
+      const feedStale = busy.status === "failed" || (fetchedMs != null && now - fetchedMs > 24 * 3600e3);
+      if (feedStale) {
+        el.append(Object.assign(document.createElement("span"),
+          { textContent: " ⚠ calendar feed stale", className: "stale" }));
+      }
+    }
     const pending = [...entries.keys()].filter((p) => /^Ledger\/Inbox\/(?!_)/.test(p)).length;
     const badge = document.getElementById("inbox-badge");
     badge.hidden = pending === 0;
@@ -110,7 +120,7 @@ async function renderStatus() {
 
 async function boot() {
   if (DEMO) {
-    const { FakeGitHub } = await import("./fixtures.js?v=7");
+    const { FakeGitHub } = await import("./fixtures.js?v=8");
     gh = new FakeGitHub();
   } else {
     gh = await connect();

@@ -4,7 +4,7 @@
 // on expectedHeadOid, with semantic re-apply retry. Every path passes the
 // journal guard. In-flight writes persist to localStorage until confirmed.
 
-import { assertNotJournalPath } from "./model.js?v=9";
+import { assertNotJournalPath } from "./model.js?v=10";
 
 const API = "https://api.github.com";
 

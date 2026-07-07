@@ -6,8 +6,8 @@
 
 import {
   todayIST, parseProposal, proposalSummary, buildInboxCommit, PROPOSAL_TYPES, METRIC_FILES, slugify, blobUrl,
-} from "./model.js?v=9";
-import { AuthError } from "./github.js?v=9";
+} from "./model.js?v=10";
+import { AuthError } from "./github.js?v=10";
 
 export async function renderInbox(gh, view) {
   const today = todayIST();

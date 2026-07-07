@@ -8,8 +8,8 @@ import {
   validateMetric, journalPath, METRIC_FILES,
   dayPlanPath, parseDayPlan, extractJournalToday3, diffToday3, summarizeDiff,
   parseBusyCsv, ageString,
-} from "./model.js?v=9";
-import { AuthError, stashPending, takePending } from "./github.js?v=9";
+} from "./model.js?v=10";
+import { AuthError, stashPending, takePending } from "./github.js?v=10";
 
 const FLUSH_MS = 8000;
 const UNITS = { weight: "kg", steps: "steps", protein: "g", sleep_quality: "/5" };

@@ -6,7 +6,7 @@
 import {
   todayIST, parseCommitment, parseCSV, quarterRocks, thisMonthGates, annualGoals,
   metricReadout, quarterOf, reviewPath, blobUrl, daysBetween, fmtDays, METRIC_FILES,
-} from "./model.js?v=9";
+} from "./model.js?v=10";
 
 const UNITS = { weight: "kg", steps: "steps", protein: "g", sleep_quality: "/5" };
 const TRUNCATE_AT = 160;

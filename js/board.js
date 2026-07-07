@@ -7,8 +7,8 @@
 import {
   todayIST, parseCommitment, boardColumn, transition, reschedule, rockBudgetBlocks,
   newIdeaFile, fmtDays, daysBetween
-} from "./model.js?v=9";
-import { AuthError } from "./github.js?v=9";
+} from "./model.js?v=10";
+import { AuthError } from "./github.js?v=10";
 
 const COLUMNS = [
   ["ideas", "Ideas"], ["committed", "Committed"], ["active", "Active"], ["closed", "Closed"],

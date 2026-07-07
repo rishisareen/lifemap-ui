@@ -1,19 +1,21 @@
 // main.js — router, header status, screen mounting.
 // ?demo=1 runs the whole app against bundled fixtures (no token, no network).
 
-import { connect } from "./setup.js?v=9";
-import { classifyCommit, ageString, parseBusyCsv } from "./model.js?v=9";
-import { renderToday } from "./today.js?v=9";
-import { renderInbox } from "./inbox.js?v=9";
-import { renderBoard } from "./board.js?v=9";
-import { renderReview } from "./wizard.js?v=9";
+import { connect } from "./setup.js?v=10";
+import { classifyCommit, ageString, parseBusyCsv } from "./model.js?v=10";
+import { renderToday } from "./today.js?v=10";
+import { renderInbox } from "./inbox.js?v=10";
+import { renderBoard } from "./board.js?v=10";
+import { renderReview } from "./wizard.js?v=10";
+import { renderHorizons } from "./horizons.js?v=10";
 
 const SCREENS = {
-  today:  { title: "Today",  render: renderToday },
-  inbox:  { title: "Inbox",  render: renderInbox },
-  board:  { title: "Board",  render: renderBoard },
-  review: { title: "Review", render: renderReview },
-  trends: { title: "Trends", unit: "Unit 9" },
+  today:    { title: "Today",    render: renderToday },
+  inbox:    { title: "Inbox",    render: renderInbox },
+  board:    { title: "Board",    render: renderBoard },
+  review:   { title: "Review",   render: renderReview },
+  trends:   { title: "Trends",   unit: "Unit 9" },
+  horizons: { title: "Horizons", render: renderHorizons },
 };
 
 const DEMO = new URLSearchParams(location.search).has("demo");
@@ -120,7 +122,7 @@ async function renderStatus() {
 
 async function boot() {
   if (DEMO) {
-    const { FakeGitHub } = await import("./fixtures.js?v=9");
+    const { FakeGitHub } = await import("./fixtures.js?v=10");
     gh = new FakeGitHub();
   } else {
     gh = await connect();

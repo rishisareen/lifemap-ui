@@ -10,9 +10,9 @@
 import {
   todayIST, isoWeek, reviewTargetWeek, mondayOfISOWeek, windowLabel,
   weeklyDraftPath, weeklyFinalPath, weeklyAIPath, mergeLines, parseCommitment, parseWeeklyPlan,
-  buildWeeklyDraft, buildWeeklyCommit, WD, daysBetween,
-} from "./model.js?v=8";
-import { AuthError } from "./github.js?v=8";
+  buildWeeklyDraft, buildWeeklyCommit, WD, daysBetween, parseInlineMarkdown,
+} from "./model.js?v=9";
+import { AuthError } from "./github.js?v=9";
 
 const STEPS = ["Celebrate", "Analyze misses", "Top outcomes", "Schedule", "Theme & truth", "Carry decisions"];
 
@@ -189,6 +189,17 @@ export async function renderReview(gh, view, cadence = "weekly") {
     view.append(body);
   }
 
+  // Renders **bold**/*italic*/[pillar] as real formatting — never innerHTML
+  // (matches this codebase's textContent-only convention; see parseInlineMarkdown).
+  const appendFormattedLine = (parent, line) => {
+    for (const seg of parseInlineMarkdown(line)) {
+      if (seg.type === "pillar") parent.append(el("span", "chip muted", seg.text));
+      else if (seg.type === "bold") parent.append(el("strong", null, seg.text));
+      else if (seg.type === "italic") parent.append(el("em", null, seg.text));
+      else parent.append(document.createTextNode(seg.text));
+    }
+  };
+
   // ---- step renderers ----
   const listStep = (body, el, key, heading, help) => {
     body.append(el("h3", null, heading));
@@ -197,8 +208,21 @@ export async function renderReview(gh, view, cadence = "weekly") {
     ta.rows = 8; ta.style.width = "100%";
     ta.value = state[key].join("\n");
     ta.placeholder = "one per line…";
-    ta.addEventListener("input", () => { state[key] = ta.value.split("\n").map((s) => s.trim()).filter(Boolean); });
-    body.append(ta);
+    const preview = el("div", "formatted-preview");
+    const renderPreview = () => {
+      preview.replaceChildren();
+      for (const line of state[key]) {
+        const p = el("p");
+        appendFormattedLine(p, line);
+        preview.append(p);
+      }
+    };
+    renderPreview();
+    ta.addEventListener("input", () => {
+      state[key] = ta.value.split("\n").map((s) => s.trim()).filter(Boolean);
+      renderPreview();
+    });
+    body.append(ta, el("p", "muted", "Formatted preview:"), preview);
     // AI merge affordance (celebrate / misses only)
     if (ai && Array.isArray(ai[key]) && ai[key].length) {
       const row = el("div", "floors");
@@ -206,16 +230,21 @@ export async function renderReview(gh, view, cadence = "weekly") {
       btn.addEventListener("click", () => {
         state[key] = mergeLines(state[key], ai[key]);
         ta.value = state[key].join("\n");
+        renderPreview();
         mergedFrom[key] = true;
         btn.disabled = true; btn.textContent = "✓ merged — edit above";
       });
       if (mergedFrom[key]) { btn.disabled = true; btn.textContent = "✓ merged"; }
       row.append(btn);
       body.append(row);
-      const preview = el("details");
-      preview.append(el("summary", "muted", "peek at the AI candidate"));
-      for (const line of ai[key]) preview.append(el("p", "muted", `• ${line}`));
-      body.append(preview);
+      const aiPreview = el("details");
+      aiPreview.append(el("summary", "muted", "peek at the AI candidate"));
+      for (const line of ai[key]) {
+        const p = el("p", "muted");
+        appendFormattedLine(p, line);
+        aiPreview.append(p);
+      }
+      body.append(aiPreview);
     }
   };
 

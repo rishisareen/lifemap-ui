@@ -111,3 +111,10 @@ ol li { margin: .25rem 0; }
 textarea, input[type=text] { font: inherit; }
 .card h3 { margin: .2rem 0 .3rem; font-size: 1rem; }
 label.muted { display:block; margin:.5rem 0 .15rem; font-size:.82rem; }
+
+.formatted-preview {
+  border: 1px solid var(--line); border-radius: .4rem;
+  padding: .5rem .7rem; margin: .3rem 0 .8rem; background: var(--bg);
+}
+.formatted-preview p { margin: .3rem 0; }
+.formatted-preview .chip { margin-right: .4rem; }

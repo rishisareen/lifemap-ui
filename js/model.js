@@ -383,6 +383,32 @@ export function parseBusyCsv(text) {
   return { fetchedAt, status, rows: rows.map((r) => ({ start: r.start, end: r.end, allDay: r.all_day === "1" })) };
 }
 
+// ---------- inline markdown (no third-party lib — see README: no deps) ----------
+//
+// Handles just the subset actually produced by prefill()/the AI reviewer's
+// celebrate/misses/outcomes lines: a leading "[pillar]" tag, **bold**, and
+// *italic*. Returns [{ type: "pillar"|"bold"|"italic"|"text", text }] for the
+// caller to turn into DOM nodes (never innerHTML — matches this codebase's
+// textContent-only convention).
+export function parseInlineMarkdown(line) {
+  const segments = [];
+  let rest = line;
+  const pillarMatch = /^\[([^\]]+)\]\s*/.exec(rest);
+  if (pillarMatch) {
+    segments.push({ type: "pillar", text: pillarMatch[1] });
+    rest = rest.slice(pillarMatch[0].length);
+  }
+  const re = /\*\*(.+?)\*\*|\*(.+?)\*/g;
+  let last = 0, m;
+  while ((m = re.exec(rest))) {
+    if (m.index > last) segments.push({ type: "text", text: rest.slice(last, m.index) });
+    segments.push(m[1] !== undefined ? { type: "bold", text: m[1] } : { type: "italic", text: m[2] });
+    last = re.lastIndex;
+  }
+  if (last < rest.length) segments.push({ type: "text", text: rest.slice(last) });
+  return segments;
+}
+
 export function daysBetween(fromStr, toStr) {
   return Math.round((new Date(toStr + "T12:00Z") - new Date(fromStr + "T12:00Z")) / 864e5);
 }

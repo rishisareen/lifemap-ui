@@ -332,3 +332,28 @@ test("parseBusyCsv: status failed, empty rows", () => {
   assert.equal(busy.status, "failed");
   assert.deepEqual(busy.rows, []);
 });
+
+// ---------- inline markdown ----------
+
+test("parseInlineMarkdown: pillar tag + bold + trailing text", () => {
+  const segs = M.parseInlineMarkdown('[relations] **Full house, and it feels like it** — Jatu arrived (July 3).');
+  assert.deepEqual(segs, [
+    { type: "pillar", text: "relations" },
+    { type: "bold", text: "Full house, and it feels like it" },
+    { type: "text", text: " — Jatu arrived (July 3)." },
+  ]);
+});
+
+test("parseInlineMarkdown: italic and plain text with no pillar", () => {
+  assert.deepEqual(M.parseInlineMarkdown("plain line, no markup"), [{ type: "text", text: "plain line, no markup" }]);
+  assert.deepEqual(M.parseInlineMarkdown("a *quick* note"), [
+    { type: "text", text: "a " }, { type: "italic", text: "quick" }, { type: "text", text: " note" },
+  ]);
+});
+
+test("parseInlineMarkdown: multiple bold spans on one line", () => {
+  const segs = M.parseInlineMarkdown("**A** and **B**");
+  assert.deepEqual(segs, [
+    { type: "bold", text: "A" }, { type: "text", text: " and " }, { type: "bold", text: "B" },
+  ]);
+});

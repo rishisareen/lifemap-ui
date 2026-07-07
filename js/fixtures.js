@@ -89,6 +89,32 @@ forcing_function: "Thesis outline this month"
 ---
 ## Log
 `,
+  "Ledger/Commitments/neural-reset.md": `---
+id: neural-reset
+title: Neural Reset — reclaim the mind from cheap dopamine
+pillar: mind
+horizon: 2026
+is_rock: false
+state: active
+carry_count: 0
+forcing_function: ""
+success_criteria: "Phone outside room + Do Nothing practice + grayscale permanent."
+---
+## Log
+`,
+  "Ledger/Commitments/finance-craft.md": `---
+id: finance-craft
+title: Investing craft — 3 theses, a working screener, deploy top 5
+pillar: finance
+horizon: 2026
+is_rock: false
+state: active
+carry_count: 0
+forcing_function: ""
+success_criteria: "3 written high-conviction theses; a screener over ~700 companies; capital deployed into ~5 concentrated positions by Dec 31."
+---
+## Log
+`,
   "Ledger/Commitments/learn-woodworking.md": `---
 id: learn-woodworking
 title: "Learn woodworking at the Gurgaon studio"

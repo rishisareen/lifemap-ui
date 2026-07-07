@@ -144,3 +144,119 @@ test("journal guard refuses journal writes", () => {
   assert.throws(() => M.assertNotJournalPath("Daily Journal/2026/07 (Jul)/06-Jul.md"), /REFUSED/);
   assert.equal(M.assertNotJournalPath("Ledger/Metrics/weight.csv"), "Ledger/Metrics/weight.csv");
 });
+
+// ---------- day plan ----------
+
+test("dayPlanPath matches the compiler's Plans/Daily/{Y}/{M}/{D}-Plan.md shape", () => {
+  assert.equal(M.dayPlanPath("2026-07-08"), "Plans/Daily/2026/07/08-Plan.md");
+});
+
+// Same fixture text as _System/bin/test_day_plan.py's test_build_parse_round_trip
+// (built via day_plan.build_day_plan with the identical inputs) — byte-identical
+// parsing is the paired-change contract.
+const DAY_PLAN_FIXTURE = `---
+date: 2026-07-08
+generated_by: agent
+generated_at: 2026-07-08T04:15:00+05:30
+---
+
+## Today's 3
+<!-- today3-start -->
+1. Finish day-planner spec review [deep-work] ⟨weekly⟩
+2. Call Mom about the Bihar trip [relationships] ⟨commitment:bihar-trip-mom⟩
+3. Try a new recovery routine [health] ⟨suggestion⟩
+<!-- today3-end -->
+
+## Yesterday
+- done — Wrote the day-planner requirements doc
+- slipped — Evening gym session
+
+## Context
+Calendar is blank today — no meetings to work around.
+`;
+
+test("parseDayPlan round-trips the shared fixture (both suites parse it identically)", () => {
+  const parsed = M.parseDayPlan(DAY_PLAN_FIXTURE);
+  assert.equal(parsed.date, "2026-07-08");
+  assert.equal(parsed.generatedBy, "agent");
+  assert.equal(parsed.generatedAt, "2026-07-08T04:15:00+05:30");
+  assert.deepEqual(parsed.today3, [
+    { text: "Finish day-planner spec review", pillar: "deep-work", source: "weekly" },
+    { text: "Call Mom about the Bihar trip", pillar: "relationships", source: "commitment:bihar-trip-mom" },
+    { text: "Try a new recovery routine", pillar: "health", source: "suggestion" },
+  ]);
+  assert.deepEqual(parsed.yesterday, [
+    { verdict: "done", text: "Wrote the day-planner requirements doc" },
+    { verdict: "slipped", text: "Evening gym session" },
+  ]);
+  assert.equal(parsed.context, "Calendar is blank today — no meetings to work around.");
+});
+
+test("parseDayPlan: no Schedule section is fine (optional in every phase)", () => {
+  assert.equal(M.parseDayPlan(DAY_PLAN_FIXTURE).error, undefined);
+});
+
+test("parseDayPlan: 4 MITs returns a structured error, does not throw", () => {
+  const fourMits = DAY_PLAN_FIXTURE.replace(
+    "<!-- today3-end -->",
+    "4. A fourth MIT [health] ⟨suggestion⟩\n<!-- today3-end -->");
+  const result = M.parseDayPlan(fourMits);
+  assert.match(result.error, /1-3 items/);
+});
+
+test("parseDayPlan: malformed verdict line returns a structured error, does not throw", () => {
+  const bad = DAY_PLAN_FIXTURE.replace(
+    "- done — Wrote the day-planner requirements doc",
+    "- maybe — Wrote the day-planner requirements doc");
+  const result = M.parseDayPlan(bad);
+  assert.match(result.error, /malformed ## Yesterday/);
+});
+
+test("parseDayPlan: missing Today's 3 section returns a structured error", () => {
+  const missing = "---\ndate: 2026-07-08\ngenerated_by: agent\ngenerated_at: x\n---\n\n## Yesterday\n\n## Context\nc\n";
+  const result = M.parseDayPlan(missing);
+  assert.match(result.error, /Today's 3 block/);
+});
+
+const JOURNAL_TEMPLATE = (b1, b2, b3) => `### 🗓️ Tue Jul 8 — Daily Journal
+
+## Morning
+
+**Today's 3** — a good-enough use of a chunk of my finite time, that I'd actually be willing to do
+<!-- agent:day-planner:today3 — pre-filled from weekly plan + calendar + constraints; edit freely — the edit IS the signal -->
+
+- ${b1}
+- ${b2}
+- ${b3}
+
+**Affirmation** — typed fresh, not furniture
+
+-
+
+---
+
+## Evening — floor: one line, every night
+`;
+
+test("extractJournalToday3: real template shape with 3 edited bullets", () => {
+  const text = JOURNAL_TEMPLATE("Finish the review", "Call Mom", "Go for a run");
+  assert.deepEqual(M.extractJournalToday3(text),
+    { status: "ok", items: ["Finish the review", "Call Mom", "Go for a run"] });
+});
+
+test("extractJournalToday3: R13 marker detected", () => {
+  const text = JOURNAL_TEMPLATE("no plan arrived — write your 3 by hand", "", "");
+  const result = M.extractJournalToday3(text);
+  assert.equal(result.status, "marker");
+  assert.deepEqual(result.items, []);
+});
+
+test("extractJournalToday3: heading present, empty bullets — no crash", () => {
+  const text = JOURNAL_TEMPLATE("", "", "");
+  assert.deepEqual(M.extractJournalToday3(text), { status: "ok", items: [] });
+});
+
+test("extractJournalToday3: heading absent", () => {
+  const text = "### 🗓️ Tue Jul 8 — Daily Journal\n\n## Morning\n\nNo today's-3 heading at all.\n";
+  assert.equal(M.extractJournalToday3(text).status, "absent");
+});

@@ -246,6 +246,90 @@ export function journalPath(dateStr) {
   return `Daily Journal/${y}/${String(m).padStart(2, "0")} (${MONS[m - 1]})/${String(d).padStart(2, "0")}-${MONS[m - 1]}.md`;
 }
 
+// ---------- day plan (mirrors _System/bin/day_plan.py — PAIRED CHANGE) ----------
+
+const TODAY3_START = "<!-- today3-start -->";
+const TODAY3_END = "<!-- today3-end -->";
+const VALID_VERDICTS = ["done", "slipped", "dropped", "unverified"];
+const R13_MARKER = "no plan arrived";
+const MIT_RE = /^\d+\.\s+(.+?)\s+\[([^\]]+)\]\s+⟨([^⟩]+)⟩\s*$/;
+const VERDICT_RE = new RegExp(`^-\\s*(${VALID_VERDICTS.join("|")})\\s*—\\s*(.+)$`);
+
+export function dayPlanPath(dateStr) {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  return `Plans/Daily/${y}/${String(m).padStart(2, "0")}/${String(d).padStart(2, "0")}-Plan.md`;
+}
+
+function daySection(text, header, nextHeaders) {
+  const start = text.indexOf(header);
+  if (start < 0) return null;
+  const from = start + header.length;
+  let end = text.length;
+  for (const h of nextHeaders) {
+    const i = text.indexOf(h, from);
+    if (i >= 0) end = Math.min(end, i);
+  }
+  return text.slice(from, end).replace(/^\n+|\n+$/g, "");
+}
+
+// Combines parse + validate: returns { error } (structured, never throws) on
+// any malformed input, or the parsed day-plan fields on success.
+export function parseDayPlan(text) {
+  const fm = parseFrontmatter(text);
+  if (fm.generated_by !== "agent" && fm.generated_by !== "fallback") {
+    return { error: `generated_by must be 'agent' or 'fallback', got ${JSON.stringify(fm.generated_by)}` };
+  }
+  if (!fm.date) return { error: "missing or malformed date" };
+  if (!fm.generated_at) return { error: "missing generated_at" };
+
+  const today3Block = daySection(text, TODAY3_START, [TODAY3_END]);
+  if (today3Block == null) return { error: "missing Today's 3 block (today3-start/end markers)" };
+  const rawToday3 = today3Block.split("\n").map((l) => l.trim()).filter(Boolean);
+  const today3 = [];
+  for (const ln of rawToday3) {
+    const m = MIT_RE.exec(ln);
+    if (m) today3.push({ text: m[1], pillar: m[2], source: m[3] });
+  }
+  if (today3.length !== rawToday3.length) return { error: "malformed Today's 3 line(s)" };
+  if (today3.length < 1 || today3.length > 3) return { error: `Today's 3 must have 1-3 items, got ${today3.length}` };
+
+  const yesterdayBlock = daySection(text, "## Yesterday", ["## Context", "## Schedule"]);
+  if (yesterdayBlock == null) return { error: "missing ## Yesterday section" };
+  const rawYesterday = yesterdayBlock.split("\n").map((l) => l.trim()).filter(Boolean);
+  const yesterday = [];
+  for (const ln of rawYesterday) {
+    const m = VERDICT_RE.exec(ln);
+    if (m) yesterday.push({ verdict: m[1], text: m[2] });
+  }
+  if (yesterday.length !== rawYesterday.length) return { error: "malformed ## Yesterday verdict line(s)" };
+
+  const contextBlock = daySection(text, "## Context", ["## Schedule"]);
+  if (contextBlock == null) return { error: "missing ## Context section" };
+
+  return {
+    date: fm.date, generatedBy: fm.generated_by, generatedAt: fm.generated_at,
+    today3, yesterday, context: contextBlock.trim(),
+  };
+}
+
+// Parses the JOURNAL's Today's 3 shape (bold label + anchor comment +
+// bullets), NOT the day-plan frontmatter shape. Returns
+// { status: "ok"|"absent"|"marker", items: [str, ...] }.
+export function extractJournalToday3(text) {
+  const m = /\*\*Today's 3\*\*.*?\n/.exec(text);
+  if (!m) return { status: "absent", items: [] };
+  const rest = text.slice(m.index + m[0].length);
+  const stop = /\n\s*(\*\*[^\n]+\*\*|---)/.exec(rest);
+  const block = stop ? rest.slice(0, stop.index) : rest;
+  const items = [];
+  for (const ln of block.split("\n")) {
+    const bm = /^\s*-\s+(.*\S)\s*$/.exec(ln);
+    if (bm) items.push(bm[1].trim());
+  }
+  if (items.some((it) => it.includes(R13_MARKER))) return { status: "marker", items: [] };
+  return { status: "ok", items };
+}
+
 export function daysBetween(fromStr, toStr) {
   return Math.round((new Date(toStr + "T12:00Z") - new Date(fromStr + "T12:00Z")) / 864e5);
 }

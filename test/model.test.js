@@ -357,3 +357,105 @@ test("parseInlineMarkdown: multiple bold spans on one line", () => {
     { type: "bold", text: "A" }, { type: "text", text: " and " }, { type: "bold", text: "B" },
   ]);
 });
+
+// ---------- horizons (quarterly/annual goal summary) ----------
+
+function mkCommitment(f) {
+  const lines = ["---", `id: ${f.id}`, `title: ${f.title || f.id}`, `pillar: ${f.pillar || "wellness"}`];
+  if (f.horizon) lines.push(`horizon: ${f.horizon}`);
+  lines.push(`is_rock: ${f.isRock ? "true" : "false"}`, `state: ${f.state || "active"}`);
+  if (f.gateDate) lines.push(`gate_date: ${f.gateDate}`);
+  if (f.targetMetric) lines.push(`target_metric: ${f.targetMetric}`);
+  if (f.targetValue != null) lines.push(`target_value: ${f.targetValue}`);
+  if (f.targetDate) lines.push(`target_date: ${f.targetDate}`);
+  lines.push("---", "");
+  return M.parseCommitment(lines.join("\n"));
+}
+
+test("parseCommitment: additive horizon/successCriteria fields; existing named fields unchanged", () => {
+  const c = M.parseCommitment(COMMITMENT);
+  assert.equal(c.horizon, "2026-Q3");
+  assert.equal(c.successCriteria, "Trip taken with Mom, 3rd week of July 2026.");
+  assert.equal(c.id, "bihar-trip-mom"); // no regression in existing named fields
+  assert.equal(c.isRock, true);
+  assert.equal(c.gateDate, "2026-07-07");
+
+  const bare = M.parseCommitment("---\nid: x\ntitle: X\npillar: joy\nis_rock: false\nstate: idea\n---\n");
+  assert.equal(bare.horizon, "");
+  assert.equal(bare.successCriteria, "");
+});
+
+test("quarterRocks: active/committed rocks, gate-sorted; excludes non-rocks, ideas, closed, retired", () => {
+  const commitments = [
+    mkCommitment({ id: "rock-c", isRock: true, state: "active", gateDate: "2026-07-20" }),
+    mkCommitment({ id: "rock-a", isRock: true, state: "active", gateDate: "2026-07-08" }),
+    mkCommitment({ id: "rock-b", isRock: true, state: "committed", gateDate: "2026-07-12" }),
+    mkCommitment({ id: "not-a-rock", isRock: false, state: "active" }),
+    mkCommitment({ id: "idea-rock", isRock: true, state: "idea" }),
+    mkCommitment({ id: "closed-rock", isRock: true, state: "done" }),
+    mkCommitment({ id: "retired-rock", isRock: true, state: "retired" }),
+  ];
+  assert.deepEqual(M.quarterRocks(commitments).map((c) => c.id), ["rock-a", "rock-b", "rock-c"]);
+});
+
+test("thisMonthGates: gate_date in the current IST month + horizon:YYYY-MM, excludes other months", () => {
+  const commitments = [
+    mkCommitment({ id: "july-gate", title: "July gate", state: "active", gateDate: "2026-07-20" }),
+    mkCommitment({ id: "july-horizon", title: "July horizon, no gate", state: "committed", horizon: "2026-07" }),
+    mkCommitment({ id: "august-gate", title: "August gate", state: "active", gateDate: "2026-08-05" }),
+  ];
+  const gates = M.thisMonthGates(commitments, "2026-07-07");
+  assert.deepEqual(gates.map((g) => g.title), ["July gate", "July horizon, no gate"]);
+  assert.equal(gates[0].daysToGate, 13);
+  assert.equal(gates[1].gateDate, null);
+});
+
+test("thisMonthGates: no matching gate returns []", () => {
+  const commitments = [mkCommitment({ id: "august-gate", state: "active", gateDate: "2026-08-05" })];
+  assert.deepEqual(M.thisMonthGates(commitments, "2026-07-07"), []);
+});
+
+test("annualGoals: horizon:2026 active/committed only — excludes retired/done and quarter-horizon rocks", () => {
+  const commitments = [
+    mkCommitment({ id: "neural-reset", pillar: "mind", horizon: "2026", state: "active" }),
+    mkCommitment({ id: "old-goal", pillar: "joy", horizon: "2026", state: "retired" }),
+    mkCommitment({ id: "done-goal", pillar: "travel", horizon: "2026", state: "done" }),
+    mkCommitment({ id: "q3-rock", pillar: "finance", horizon: "2026-Q3", isRock: true, state: "active" }),
+  ];
+  assert.deepEqual(M.annualGoals(commitments, "2026-07-07").map((c) => c.id), ["neural-reset"]);
+});
+
+test("metricReadout: latest-vs-target for a metric-linked commitment", () => {
+  const c = mkCommitment({ id: "resume-training", targetMetric: "weight", targetValue: 80, targetDate: "2026-08-04" });
+  const rows = M.parseCSV("date,value,source,note\n2026-07-01,85,q3-review,\n2026-07-06,84.6,ui,\n").rows;
+  assert.deepEqual(M.metricReadout(c, rows, "2026-07-07"),
+    { latest: "84.6", target: 80, targetDate: "2026-08-04", daysLeft: 28 });
+});
+
+test("metricReadout: no logged rows yet -> latest null (partial state); no target_metric -> null", () => {
+  const c = mkCommitment({ id: "resume-training", targetMetric: "weight", targetValue: 80, targetDate: "2026-08-04" });
+  assert.equal(M.metricReadout(c, [], "2026-07-07").latest, null);
+  assert.equal(M.metricReadout(mkCommitment({ id: "no-metric" }), [], "2026-07-07"), null);
+});
+
+test("quarterOf: month -> quarter mapping incl. year boundaries", () => {
+  assert.deepEqual(M.quarterOf("2026-01-15"), { year: 2026, q: 1 });
+  assert.deepEqual(M.quarterOf("2026-07-07"), { year: 2026, q: 3 });
+  assert.deepEqual(M.quarterOf("2026-10-01"), { year: 2026, q: 4 });
+  assert.deepEqual(M.quarterOf("2026-12-31"), { year: 2026, q: 4 });
+});
+
+test("reviewPath: quarterly, monthly, and annual-to-current-quarter mapping", () => {
+  assert.equal(M.reviewPath("2026-Q3", "2026-07-07"), "Reviews - Month and Quarter/Q3.md");
+  assert.equal(M.reviewPath("2026-07", "2026-07-07"), "Reviews - Month and Quarter/07-2026.md");
+  assert.equal(M.reviewPath("2026", "2026-07-07"), "Reviews - Month and Quarter/Q3.md");
+});
+
+test("reviewPath: unrecognized horizon returns null (caller omits the link)", () => {
+  assert.equal(M.reviewPath("idea", "2026-07-07"), null);
+});
+
+test("blobUrl: percent-encodes spaces per path segment, preserves slashes", () => {
+  assert.equal(M.blobUrl("Reviews - Month and Quarter/Q3.md"),
+    "https://github.com/rishisareen/lifemap/blob/main/Reviews%20-%20Month%20and%20Quarter/Q3.md");
+});

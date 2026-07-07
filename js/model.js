@@ -50,6 +50,8 @@ export function parseCommitment(text) {
     targetValue: fm.target_value ? parseFloat(fm.target_value) : null,
     targetDate: fm.target_date || null,
     forcingFunction: fm.forcing_function || "",
+    horizon: fm.horizon || "",
+    successCriteria: fm.success_criteria || "",
     constraints,
     fm,
   };
@@ -790,6 +792,89 @@ export function gateChips(commitments, todayStr) {
     }
   }
   return chips.sort((a, b) => a.days - b.days);
+}
+
+// ---------- horizons (quarterly/annual goal summary — read-only) ----------
+
+// The 3-rock budget, active or committed, gate-sorted (soonest first).
+export function quarterRocks(commitments) {
+  return commitments
+    .filter((c) => c.isRock && (c.state === "active" || c.state === "committed"))
+    .sort((a, b) => (a.gateDate || "9999-12-31").localeCompare(b.gateDate || "9999-12-31"));
+}
+
+// Commitments that land THIS calendar month (IST): a gate_date inside the
+// month, or a horizon explicitly scoped to it (horizon: 2026-07) even when
+// ungated. Reshaped — the card only needs these four facts.
+export function thisMonthGates(commitments, todayStr) {
+  const ym = todayStr.slice(0, 7);
+  const out = [];
+  for (const c of commitments) {
+    if (c.state !== "active" && c.state !== "committed") continue;
+    const inGateMonth = c.gateDate && c.gateDate.slice(0, 7) === ym;
+    const isMonthHorizon = c.fm.horizon === ym;
+    if (!inGateMonth && !isMonthHorizon) continue;
+    out.push({
+      title: c.title,
+      pillar: c.pillar,
+      gateDate: c.gateDate || null,
+      daysToGate: c.gateDate ? daysBetween(todayStr, c.gateDate) : null,
+    });
+  }
+  return out.sort((a, b) => (a.gateDate || "9999-12-31").localeCompare(b.gateDate || "9999-12-31"));
+}
+
+// Annual goals for the current year, excluding ones a review already closed
+// (retired/done) — a retired goal never resurfaces just because its file
+// still has horizon: 2026.
+export function annualGoals(commitments, todayStr) {
+  const year = todayStr.slice(0, 4);
+  return commitments
+    .filter((c) => c.fm.horizon === year && c.state !== "retired" && c.state !== "done")
+    .sort((a, b) => a.pillar.localeCompare(b.pillar) || a.title.localeCompare(b.title));
+}
+
+// Latest-vs-target readout for a metric-linked commitment. null when the
+// commitment names no target_metric; latest is null (not a crash) when the
+// metric has no logged rows yet (early-quarter partial state).
+export function metricReadout(commitment, rows, todayStr) {
+  if (!commitment.targetMetric) return null;
+  const latest = latestMetric(rows || []);
+  return {
+    latest: latest ? latest.value : null,
+    target: commitment.targetValue,
+    targetDate: commitment.targetDate,
+    daysLeft: commitment.targetDate ? daysBetween(todayStr, commitment.targetDate) : null,
+  };
+}
+
+// { year, q } for todayStr — months 1-3 -> Q1 ... 10-12 -> Q4.
+export function quarterOf(todayStr) {
+  const [year, month] = todayStr.slice(0, 7).split("-").map(Number);
+  return { year, q: Math.ceil(month / 3) };
+}
+
+const REVIEWS_DIR = "Reviews - Month and Quarter";
+
+// Maps a commitment's horizon to its authored review file. "2026-Q3" and
+// "2026-07" are literal; a bare annual horizon ("2026") has no review file
+// of its own, so it points at the CURRENT quarter's file (the running H1/H2
+// checkpoint). Unmapped horizons (e.g. "idea") return null — the caller
+// omits the link rather than emit a dead one.
+export function reviewPath(horizon, todayStr) {
+  const q = /^(\d{4})-Q([1-4])$/.exec(horizon);
+  if (q) return `${REVIEWS_DIR}/Q${q[2]}.md`;
+  const m = /^(\d{4})-(\d{2})$/.exec(horizon);
+  if (m) return `${REVIEWS_DIR}/${m[2]}-${m[1]}.md`;
+  if (/^\d{4}$/.test(horizon)) return `${REVIEWS_DIR}/Q${quarterOf(todayStr).q}.md`;
+  return null;
+}
+
+// Shared by inbox.js (proposal source links) and horizons.js (review links).
+export const REPO_URL = "https://github.com/rishisareen/lifemap/blob/main/";
+
+export function blobUrl(path) {
+  return REPO_URL + path.split("/").map(encodeURIComponent).join("/");
 }
 
 // ---------- metric logging (the batched write op) ----------

@@ -5,11 +5,9 @@
 // proposals whose file is already gone).
 
 import {
-  todayIST, parseProposal, proposalSummary, buildInboxCommit, PROPOSAL_TYPES, METRIC_FILES, slugify,
+  todayIST, parseProposal, proposalSummary, buildInboxCommit, PROPOSAL_TYPES, METRIC_FILES, slugify, blobUrl,
 } from "./model.js?v=9";
 import { AuthError } from "./github.js?v=9";
-
-const REPO_URL = "https://github.com/rishisareen/lifemap/blob/main/";
 
 export async function renderInbox(gh, view) {
   const today = todayIST();
@@ -122,7 +120,7 @@ export async function renderInbox(gh, view) {
       card.append(body);
     }
     const link = el("a", "muted", "open in repo ↗");
-    link.href = REPO_URL + p.path.split("/").map(encodeURIComponent).join("/");
+    link.href = blobUrl(p.path);
     link.target = "_blank";
     link.rel = "noopener";
     card.append(link);

@@ -6,8 +6,8 @@
 
 import {
   todayIST, parseProposal, proposalSummary, buildInboxCommit, PROPOSAL_TYPES, METRIC_FILES, slugify,
-} from "./model.js?v=5";
-import { AuthError } from "./github.js?v=5";
+} from "./model.js?v=6";
+import { AuthError } from "./github.js?v=6";
 
 const REPO_URL = "https://github.com/rishisareen/lifemap/blob/main/";
 

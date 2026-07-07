@@ -4,7 +4,7 @@
 // on expectedHeadOid, with semantic re-apply retry. Every path passes the
 // journal guard. In-flight writes persist to localStorage until confirmed.
 
-import { assertNotJournalPath } from "./model.js?v=5";
+import { assertNotJournalPath } from "./model.js?v=6";
 
 const API = "https://api.github.com";
 
@@ -20,6 +20,8 @@ export class GitHub {
     this.fetch = fetchFn || ((...a) => globalThis.fetch(...a));
     this.blobCache = new Map();   // blob sha -> text
     this.treeCache = null;        // { headOid, entries: Map(path -> {sha, size}) }
+    this.headHint = null;         // oid our last write returned — trusted over the lagging
+                                  // REST ref as the next write's base (see commitOp)
   }
 
   async rest(path, { method = "GET", headers = {}, body, raw = false } = {}) {
@@ -78,8 +80,8 @@ export class GitHub {
   // headOid check already short-circuits the unchanged case, so a conditional
   // GET never yields a usable 304 — and a stale etag left behind after the write
   // engine cleared treeCache is exactly what caused the "tree failed (304)" crash.)
-  async tree() {
-    const head = await this.headOid();
+  async tree(head) {
+    head = head ?? await this.headOid();
     if (this.treeCache?.headOid === head) return this.treeCache;
     const res = await this.rest(`/repos/${this.owner}/${this.repo}/git/trees/${head}?recursive=1`);
     if (!res.ok) throw new Error(`tree failed (${res.status})`);
@@ -91,8 +93,8 @@ export class GitHub {
     return this.treeCache;
   }
 
-  async readFile(path) {
-    const { entries } = await this.tree();
+  async readFile(path, head) {
+    const { entries } = await this.tree(head);
     const entry = entries.get(path);
     if (!entry) return null;
     if (this.blobCache.has(entry.sha)) return this.blobCache.get(entry.sha);
@@ -104,10 +106,10 @@ export class GitHub {
     return text;
   }
 
-  async readFiles(paths) {
+  async readFiles(paths, head) {
     const out = {};
     await Promise.all(paths.map(async (p) => {
-      const t = await this.readFile(p);
+      const t = await this.readFile(p, head);
       if (t !== null) out[p] = t;
     }));
     return out;
@@ -123,9 +125,17 @@ export class GitHub {
   async commitOp(build, { reads = [], retries = 3 } = {}) {
     let lastErr;
     for (let attempt = 0; attempt <= retries; attempt++) {
-      const head = await this.headOid();
+      // Prefer the head our own last write returned. GitHub's REST ref endpoint
+      // lags createCommitOnBranch by seconds, so re-reading it right after our
+      // own commit hands back a stale head → a self-inflicted CAS conflict (the
+      // bug that broke a second Inbox accept). We read the expectedHeadOid AND
+      // the files at this same head, so the change is built on a consistent
+      // snapshot and never clobbers our previous write. A genuine conflict means
+      // an external writer (bridge/Actions) really moved head — we drop the hint
+      // and re-read the ref fresh so their work is picked up on retry.
+      const head = this.headHint ?? await this.headOid();
       this.treeCache = null; // force fresh tree/blobs for this attempt
-      const files = await this.readFiles(reads);
+      const files = await this.readFiles(reads, head);
       const op = await build(files);
       if (!op || (!op.changes?.length && !op.deletions?.length)) return null; // nothing to do
       for (const c of op.changes || []) assertNotJournalPath(c.path);
@@ -134,6 +144,7 @@ export class GitHub {
         return await this.createCommit(head, op);
       } catch (e) {
         if (e instanceof CasConflict && attempt < retries) {
+          this.headHint = null; // stale — re-read the ref fresh on the next attempt
           lastErr = e;
           await new Promise((r) => setTimeout(r, 300 + Math.random() * 700));
           continue;
@@ -161,8 +172,10 @@ export class GitHub {
       `mutation($input: CreateCommitOnBranchInput!) {
          createCommitOnBranch(input: $input) { commit { oid } } }`,
       { input });
+    const oid = data.createCommitOnBranch.commit.oid;
     this.treeCache = null; // our own write invalidates the cache
-    return data.createCommitOnBranch.commit.oid;
+    this.headHint = oid;   // ...and gives us the new head before the REST ref catches up
+    return oid;
   }
 
   // ---- actions ----

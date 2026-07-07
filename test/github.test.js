@@ -17,9 +17,11 @@ test("b64encode is unicode-safe", () => {
 });
 
 // A fake GitHub backend: head moves when told, serves tree/blobs, accepts
-// createCommitOnBranch only when expectedHeadOid matches.
-function fakeBackend(files) {
-  const state = { head: "aaa", files: { ...files }, commits: [] };
+// createCommitOnBranch only when expectedHeadOid matches. With refLag > 0 the
+// REST ref endpoint keeps reporting the PREVIOUS head for that many reads after
+// a commit — GitHub's real read-after-write lag between GraphQL and REST.
+function fakeBackend(files, { refLag = 0 } = {}) {
+  const state = { head: "aaa", refHead: "aaa", lagReads: 0, files: { ...files }, commits: [] };
   const fetchFn = async (url, opts = {}) => {
     const body = opts.body ? JSON.parse(opts.body) : null;
     const json = (data, status = 200, headers = {}) => ({
@@ -38,9 +40,14 @@ function fakeBackend(files) {
       }
       for (const d of body.variables.input.fileChanges.deletions) delete state.files[d.path];
       state.head = state.head + "x";
+      state.lagReads = refLag; // the REST ref now lags the true head for this many reads
       return json({ data: { createCommitOnBranch: { commit: { oid: state.head } } } });
     }
-    if (/\/git\/ref\/heads\//.test(url)) return json({ object: { sha: state.head } });
+    if (/\/git\/ref\/heads\//.test(url)) {
+      if (state.lagReads > 0) state.lagReads--;   // still reporting the stale head
+      else state.refHead = state.head;            // caught up
+      return json({ object: { sha: state.refHead } });
+    }
     if (/\/git\/trees\//.test(url)) {
       // Realistic: GitHub serves a per-tree ETag and 304s a matching If-None-Match.
       const etag = "tree-" + state.head;
@@ -82,6 +89,25 @@ test("commitOp: write after a cached-tree read survives the 304 conditional path
   }), { reads: ["f.md"] });
   assert.equal(state.commits.length, 1);
   assert.equal(state.files["f.md"], "base\nline\n");
+});
+
+test("commitOp: back-to-back writes survive REST ref read-after-write lag", async () => {
+  // Regression: after write #1 moves head via GraphQL, the REST ref keeps
+  // reporting the OLD head for a while. Write #2 fired right after must commit
+  // against the oid write #1 returned — not the stale ref — or it self-conflicts
+  // for the whole retry window (the bug that failed the second Inbox accept).
+  // refLag(10) outlasts the 4 attempts, so a ref-reading engine can never win.
+  const { state, fetchFn } = fakeBackend({ "a.md": "A\n", "b.md": "B\n" }, { refLag: 10 });
+  const gh = new GitHub({ token: "t", fetchFn });
+  await gh.commitOp(async (f) => ({
+    message: "w1", changes: [{ path: "a.md", text: f["a.md"] + "1\n" }], deletions: [],
+  }), { reads: ["a.md"] });
+  await gh.commitOp(async (f) => ({
+    message: "w2", changes: [{ path: "b.md", text: f["b.md"] + "2\n" }], deletions: [],
+  }), { reads: ["b.md"] });
+  assert.equal(state.commits.length, 2);
+  assert.equal(state.files["a.md"], "A\n1\n"); // write #1 preserved, not clobbered
+  assert.equal(state.files["b.md"], "B\n2\n"); // write #2 applied on the fresh snapshot
 });
 
 test("commitOp: CAS conflict re-reads and re-applies semantics on new base", async () => {

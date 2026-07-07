@@ -6,8 +6,8 @@
 
 import {
   todayIST, parseProposal, proposalSummary, buildInboxCommit, PROPOSAL_TYPES, METRIC_FILES, slugify,
-} from "./model.js?v=6";
-import { AuthError } from "./github.js?v=6";
+} from "./model.js?v=7";
+import { AuthError } from "./github.js?v=7";
 
 const REPO_URL = "https://github.com/rishisareen/lifemap/blob/main/";
 
@@ -54,9 +54,10 @@ export async function renderInbox(gh, view) {
     return [...reads];
   };
 
-  const decide = async (decisions, note) => {
+  const decide = async (decisions, note, buttons = []) => {
     if (busy.on) return;
     busy.on = true;
+    buttons.forEach((b) => (b.disabled = true)); // no double-submit while the commit is in flight
     note.textContent = "applying…";
     note.className = "muted";
     try {
@@ -76,6 +77,7 @@ export async function renderInbox(gh, view) {
       if (oid === null && !result.stale.length) return; // double-tap no-op
     } catch (e) {
       busy.on = false;
+      buttons.forEach((b) => (b.disabled = false)); // let the user genuinely retry a real failure
       if (e instanceof AuthError) {
         note.textContent = "Token rejected — nothing was written. Reload to re-authenticate; proposals are safe in the repo.";
       } else {
@@ -92,7 +94,7 @@ export async function renderInbox(gh, view) {
     const all = el("button", "primary", `✓ Accept all ${proposals.length}`);
     all.addEventListener("click", () =>
       decide(proposals.filter((p) => p.id && PROPOSAL_TYPES.includes(p.type))
-        .map((proposal) => ({ proposal, action: "accept" })), note));
+        .map((proposal) => ({ proposal, action: "accept" })), note, [all]));
     bar.append(all, note);
     view.append(bar);
   } else {
@@ -129,8 +131,8 @@ export async function renderInbox(gh, view) {
     if (parseable) {
       const yes = el("button", "primary", "✓ Accept");
       const no = el("button", null, "✗ Reject");
-      yes.addEventListener("click", () => decide([{ proposal: p, action: "accept" }], note));
-      no.addEventListener("click", () => decide([{ proposal: p, action: "reject" }], note));
+      yes.addEventListener("click", () => decide([{ proposal: p, action: "accept" }], note, [yes, no]));
+      no.addEventListener("click", () => decide([{ proposal: p, action: "reject" }], note, [yes, no]));
       row.append(yes, no);
     }
     card.append(row);

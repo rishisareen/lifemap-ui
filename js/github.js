@@ -4,7 +4,7 @@
 // on expectedHeadOid, with semantic re-apply retry. Every path passes the
 // journal guard. In-flight writes persist to localStorage until confirmed.
 
-import { assertNotJournalPath } from "./model.js?v=6";
+import { assertNotJournalPath } from "./model.js?v=7";
 
 const API = "https://api.github.com";
 
@@ -68,10 +68,19 @@ export class GitHub {
 
   // ---- reads ----
 
+  // Read HEAD via GraphQL — the SAME service as createCommitOnBranch, so it
+  // reflects our writes immediately. The REST /git/ref endpoint lags the GraphQL
+  // commit by seconds, which made every read-after-write path (a second write, a
+  // CAS retry) act on a stale head: self-conflicts and false "failures" on writes
+  // that had actually landed. GraphQL read-your-writes removes that whole class.
   async headOid() {
-    const res = await this.rest(`/repos/${this.owner}/${this.repo}/git/ref/heads/${this.branch}`);
-    if (!res.ok) throw new Error(`headOid failed (${res.status})`);
-    return (await res.json()).object.sha;
+    const data = await this.graphql(
+      `query($owner:String!,$repo:String!,$qual:String!){
+         repository(owner:$owner,name:$repo){ ref(qualifiedName:$qual){ target{ oid } } } }`,
+      { owner: this.owner, repo: this.repo, qual: `refs/heads/${this.branch}` });
+    const oid = data.repository?.ref?.target?.oid;
+    if (!oid) throw new Error("headOid failed (ref not found)");
+    return oid;
   }
 
   // Whole-repo listing, cached by head oid. A git tree is content-addressed by

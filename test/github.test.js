@@ -30,6 +30,10 @@ function fakeBackend(files, { refLag = 0 } = {}) {
       json: async () => data, text: async () => (typeof data === "string" ? data : JSON.stringify(data)),
     });
     if (url.endsWith("/graphql")) {
+      if (!body.variables.input) {
+        // ref-oid query: GraphQL is consistent with its own writes (no lag).
+        return json({ data: { repository: { ref: { target: { oid: state.head } } } } });
+      }
       const oid = body.variables.input.expectedHeadOid;
       if (oid !== state.head) {
         return json({ errors: [{ message: `Expected branch to point to "${state.head}" but it did not` }] });
@@ -89,6 +93,21 @@ test("commitOp: write after a cached-tree read survives the 304 conditional path
   }), { reads: ["f.md"] });
   assert.equal(state.commits.length, 1);
   assert.equal(state.files["f.md"], "base\nline\n");
+});
+
+test("headOid reads the consistent GraphQL ref, not the lagging REST ref", async () => {
+  // Root cause of the false "failure" on a write that actually landed: after a
+  // commit, REST /git/ref keeps reporting the OLD head, so a retry re-reads a
+  // stale tree, re-tries an already-applied change, and conflict-loops. HEAD must
+  // come from GraphQL (read-your-writes) so any reader sees the true head.
+  const { state, fetchFn } = fakeBackend({ "f.md": "x\n" }, { refLag: 10 });
+  const gh = new GitHub({ token: "t", fetchFn });
+  await gh.commitOp((f) => ({
+    message: "w", changes: [{ path: "f.md", text: f["f.md"] + "y\n" }], deletions: [],
+  }), { reads: ["f.md"] });
+  const trueHead = state.head; // the head the commit produced
+  const fresh = new GitHub({ token: "t", fetchFn }); // no headHint — must read it, not guess
+  assert.equal(await fresh.headOid(), trueHead); // GraphQL is current; the REST ref still lags
 });
 
 test("commitOp: back-to-back writes survive REST ref read-after-write lag", async () => {

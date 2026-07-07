@@ -254,6 +254,7 @@ const VALID_VERDICTS = ["done", "slipped", "dropped", "unverified"];
 const R13_MARKER = "no plan arrived";
 const MIT_RE = /^\d+\.\s+(.+?)\s+\[([^\]]+)\]\s+⟨([^⟩]+)⟩\s*$/;
 const VERDICT_RE = new RegExp(`^-\\s*(${VALID_VERDICTS.join("|")})\\s*—\\s*(.+)$`);
+const SCHEDULE_RE = /^-\s*(\d{2}:\d{2})–(\d{2}:\d{2})\s+\[([^\]]+)\]\s+(.+)$/;
 
 export function dayPlanPath(dateStr) {
   const [y, m, d] = dateStr.split("-").map(Number);
@@ -306,9 +307,22 @@ export function parseDayPlan(text) {
   const contextBlock = daySection(text, "## Context", ["## Schedule"]);
   if (contextBlock == null) return { error: "missing ## Context section" };
 
+  // Schedule (Unit 6) is optional in every phase — checked only when present.
+  const scheduleBlock = daySection(text, "## Schedule", []);
+  let schedule = [];
+  if (scheduleBlock != null) {
+    const rawSchedule = scheduleBlock.split("\n").map((l) => l.trim()).filter(Boolean);
+    schedule = [];
+    for (const ln of rawSchedule) {
+      const m = SCHEDULE_RE.exec(ln);
+      if (m) schedule.push({ start: m[1], end: m[2], pillar: m[3], label: m[4] });
+    }
+    if (schedule.length !== rawSchedule.length) return { error: "malformed ## Schedule line(s)" };
+  }
+
   return {
     date: fm.date, generatedBy: fm.generated_by, generatedAt: fm.generated_at,
-    today3, yesterday, context: contextBlock.trim(),
+    today3, yesterday, context: contextBlock.trim(), schedule,
   };
 }
 

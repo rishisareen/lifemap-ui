@@ -218,6 +218,42 @@ test("parseDayPlan: missing Today's 3 section returns a structured error", () =>
   assert.match(result.error, /Today's 3 block/);
 });
 
+// ---------- day plan: Schedule (Unit 6) ----------
+
+const SCHEDULE_FIXTURE = DAY_PLAN_FIXTURE.trimEnd() + `
+
+## Schedule
+- 09:00–10:00 [deep-work] Finish spec review
+- 11:00–11:30 [relationships] Call Mom
+`;
+
+test("parseDayPlan: Schedule round-trips (same fixture shape as the Python suite)", () => {
+  const parsed = M.parseDayPlan(SCHEDULE_FIXTURE);
+  assert.deepEqual(parsed.schedule, [
+    { start: "09:00", end: "10:00", pillar: "deep-work", label: "Finish spec review" },
+    { start: "11:00", end: "11:30", pillar: "relationships", label: "Call Mom" },
+  ]);
+});
+
+test("parseDayPlan: malformed Schedule time line returns a structured error", () => {
+  const bad = SCHEDULE_FIXTURE.replace(
+    "- 09:00–10:00 [deep-work] Finish spec review", "- 9am-10am [deep-work] Finish spec review");
+  assert.match(M.parseDayPlan(bad).error, /malformed ## Schedule/);
+});
+
+test("parseDayPlan: Schedule block line missing the pillar returns a structured error", () => {
+  const bad = SCHEDULE_FIXTURE.replace(
+    "- 09:00–10:00 [deep-work] Finish spec review", "- 09:00–10:00 Finish spec review");
+  assert.match(M.parseDayPlan(bad).error, /malformed ## Schedule/);
+});
+
+test("parseDayPlan: empty Schedule section (present, no lines) still valid", () => {
+  const empty = DAY_PLAN_FIXTURE.trimEnd() + "\n\n## Schedule\n";
+  const parsed = M.parseDayPlan(empty);
+  assert.equal(parsed.error, undefined);
+  assert.deepEqual(parsed.schedule, []);
+});
+
 const JOURNAL_TEMPLATE = (b1, b2, b3) => `### 🗓️ Tue Jul 8 — Daily Journal
 
 ## Morning

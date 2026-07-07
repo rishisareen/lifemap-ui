@@ -1,10 +1,10 @@
 // github.js — the only file that talks to the network.
-// Reads: REST (raw media type) with tree/blob caching + ETag polling.
+// Reads: REST (raw media type) with tree/blob caching keyed by head oid.
 // Writes: GraphQL createCommitOnBranch — atomic multi-file, compare-and-swap
 // on expectedHeadOid, with semantic re-apply retry. Every path passes the
 // journal guard. In-flight writes persist to localStorage until confirmed.
 
-import { assertNotJournalPath } from "./model.js?v=4";
+import { assertNotJournalPath } from "./model.js?v=5";
 
 const API = "https://api.github.com";
 
@@ -19,7 +19,6 @@ export class GitHub {
     this.branch = branch;
     this.fetch = fetchFn || ((...a) => globalThis.fetch(...a));
     this.blobCache = new Map();   // blob sha -> text
-    this.treeEtag = null;
     this.treeCache = null;        // { headOid, entries: Map(path -> {sha, size}) }
   }
 
@@ -73,16 +72,17 @@ export class GitHub {
     return (await res.json()).object.sha;
   }
 
-  // Whole-repo listing, ETag-cached: 304s are free and don't hit rate limits.
+  // Whole-repo listing, cached by head oid. A git tree is content-addressed by
+  // its commit, so a cached tree whose headOid still matches is byte-identical
+  // to the server's; we only refetch when head moves. (No If-None-Match: the
+  // headOid check already short-circuits the unchanged case, so a conditional
+  // GET never yields a usable 304 — and a stale etag left behind after the write
+  // engine cleared treeCache is exactly what caused the "tree failed (304)" crash.)
   async tree() {
     const head = await this.headOid();
     if (this.treeCache?.headOid === head) return this.treeCache;
-    const res = await this.rest(
-      `/repos/${this.owner}/${this.repo}/git/trees/${head}?recursive=1`,
-      { headers: this.treeEtag ? { "If-None-Match": this.treeEtag } : {} });
-    if (res.status === 304 && this.treeCache) return this.treeCache;
+    const res = await this.rest(`/repos/${this.owner}/${this.repo}/git/trees/${head}?recursive=1`);
     if (!res.ok) throw new Error(`tree failed (${res.status})`);
-    this.treeEtag = res.headers.get("etag");
     const entries = new Map();
     for (const e of (await res.json()).tree) {
       if (e.type === "blob") entries.set(e.path, { sha: e.sha, size: e.size });

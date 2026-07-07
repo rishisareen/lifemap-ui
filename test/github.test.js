@@ -42,7 +42,12 @@ function fakeBackend(files) {
     }
     if (/\/git\/ref\/heads\//.test(url)) return json({ object: { sha: state.head } });
     if (/\/git\/trees\//.test(url)) {
-      return json({ tree: Object.keys(state.files).map((p) => ({ path: p, type: "blob", sha: "sha-" + p + "-" + state.head, size: 1 })) });
+      // Realistic: GitHub serves a per-tree ETag and 304s a matching If-None-Match.
+      const etag = "tree-" + state.head;
+      if (opts.headers?.["If-None-Match"] === etag) return json(null, 304, { etag });
+      return json(
+        { tree: Object.keys(state.files).map((p) => ({ path: p, type: "blob", sha: "sha-" + p + "-" + state.head, size: 1 })) },
+        200, { etag });
     }
     const blob = /\/git\/blobs\/sha-(.+?)-/.exec(url);
     if (blob) return json(state.files[decodeURIComponent(blob[1])] ?? "");
@@ -61,6 +66,22 @@ test("commitOp: happy path commits changes + deletions atomically", async () => 
   }), { reads: ["Ledger/Metrics/weight.csv"] });
   assert.equal(state.commits.length, 1);
   assert.match(state.files["Ledger/Metrics/weight.csv"], /84.6,ui/);
+});
+
+test("commitOp: write after a cached-tree read survives the 304 conditional path", async () => {
+  // Regression: reading first primes the tree cache; the write engine then clears
+  // treeCache to force a fresh read. If a stale ETag is still sent, GitHub 304s
+  // the unchanged head and the read must NOT crash with "tree failed (304)".
+  const { state, fetchFn } = fakeBackend({ "f.md": "base\n" });
+  const gh = new GitHub({ token: "t", fetchFn });
+  await gh.readFile("f.md"); // caches the tree at the current head
+  await gh.commitOp(async (files) => ({
+    message: "ui: append",
+    changes: [{ path: "f.md", text: files["f.md"] + "line\n" }],
+    deletions: [],
+  }), { reads: ["f.md"] });
+  assert.equal(state.commits.length, 1);
+  assert.equal(state.files["f.md"], "base\nline\n");
 });
 
 test("commitOp: CAS conflict re-reads and re-applies semantics on new base", async () => {

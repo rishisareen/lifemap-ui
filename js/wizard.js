@@ -11,8 +11,8 @@ import {
   todayIST, isoWeek, reviewTargetWeek, mondayOfISOWeek, windowLabel,
   weeklyDraftPath, weeklyFinalPath, weeklyAIPath, mergeLines, parseCommitment, parseWeeklyPlan,
   buildWeeklyDraft, buildWeeklyCommit, WD, daysBetween,
-} from "./model.js?v=4";
-import { AuthError } from "./github.js?v=4";
+} from "./model.js?v=5";
+import { AuthError } from "./github.js?v=5";
 
 const STEPS = ["Celebrate", "Analyze misses", "Top outcomes", "Schedule", "Theme & truth", "Carry decisions"];
 

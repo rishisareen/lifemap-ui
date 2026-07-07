@@ -1,12 +1,12 @@
 // main.js — router, header status, screen mounting.
 // ?demo=1 runs the whole app against bundled fixtures (no token, no network).
 
-import { connect } from "./setup.js?v=4";
-import { classifyCommit, ageString } from "./model.js?v=4";
-import { renderToday } from "./today.js?v=4";
-import { renderInbox } from "./inbox.js?v=4";
-import { renderBoard } from "./board.js?v=4";
-import { renderReview } from "./wizard.js?v=4";
+import { connect } from "./setup.js?v=5";
+import { classifyCommit, ageString } from "./model.js?v=5";
+import { renderToday } from "./today.js?v=5";
+import { renderInbox } from "./inbox.js?v=5";
+import { renderBoard } from "./board.js?v=5";
+import { renderReview } from "./wizard.js?v=5";
 
 const SCREENS = {
   today:  { title: "Today",  render: renderToday },
@@ -110,14 +110,14 @@ async function renderStatus() {
 
 async function boot() {
   if (DEMO) {
-    const { FakeGitHub } = await import("./fixtures.js?v=4");
+    const { FakeGitHub } = await import("./fixtures.js?v=5");
     gh = new FakeGitHub();
   } else {
     gh = await connect();
   }
   await renderScreen();
   await renderStatus();
-  setInterval(renderStatus, 90_000); // ETag-cached — 304s are free
+  setInterval(renderStatus, 90_000); // tree cached by head oid — unchanged polls skip the tree download
 }
 
 addEventListener("hashchange", renderScreen);

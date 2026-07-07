@@ -5,14 +5,9 @@
 
 import {
   todayIST, parseCommitment, parseCSV, quarterRocks, thisMonthGates, annualGoals,
-  metricReadout, quarterOf, reviewPath, blobUrl, daysBetween, fmtDays, METRIC_FILES,
-} from "./model.js?v=10";
-
-const UNITS = { weight: "kg", steps: "steps", protein: "g", sleep_quality: "/5" };
-const TRUNCATE_AT = 160;
-
-const gateCls = (n) => (n < 0 ? "overdue" : n <= 1 ? "urgent" : n <= 3 ? "soon" : "later");
-const truncate = (s) => (s.length > TRUNCATE_AT ? s.slice(0, TRUNCATE_AT).trimEnd() + "…" : s);
+  metricReadout, quarterOf, reviewPath, blobUrl, daysBetween, fmtDays, truncate,
+  gateUrgencyClass, METRIC_FILES, UNITS,
+} from "./model.js?v=11";
 
 export async function renderHorizons(gh, view) {
   const today = todayIST();
@@ -21,9 +16,12 @@ export async function renderHorizons(gh, view) {
 
   const files = await gh.readFiles([...commitmentPaths, ...Object.values(METRIC_FILES)]);
   const commitments = commitmentPaths.map((p) => parseCommitment(files[p] ?? "")).filter((c) => c.id);
-  const metricRows = {};
+  // Map, not a plain object: target_metric is free-text frontmatter, and a
+  // value like "__proto__" or "constructor" would otherwise resolve through
+  // the prototype chain instead of missing cleanly.
+  const metricRows = new Map();
   for (const [name, path] of Object.entries(METRIC_FILES)) {
-    metricRows[name] = files[path] != null ? parseCSV(files[path]).rows : [];
+    metricRows.set(name, files[path] != null ? parseCSV(files[path]).rows : []);
   }
 
   view.replaceChildren();
@@ -60,7 +58,24 @@ export async function renderHorizons(gh, view) {
   const gateChip = (gateDate) => {
     if (!gateDate) return el("span", "chip muted", "no gate set");
     const n = daysBetween(today, gateDate);
-    return el("span", `chip ${gateCls(n)}`, `gate ${fmtDays(n)}`);
+    return el("span", `chip ${gateUrgencyClass(n)}`, `gate ${fmtDays(n)}`);
+  };
+
+  // Metric readout label. target/latest are guarded with Number.isFinite —
+  // target_value can be absent (target: null) or non-numeric (target: NaN,
+  // if someone writes a non-numeric target_value); latest is a raw CSV
+  // string that can likewise be missing or garbage. Never interpolate a
+  // non-finite value into the chip text (that would print the literal
+  // string "null" or "NaN").
+  const metricChip = (c) => {
+    const r = metricReadout(c, metricRows.get(c.targetMetric) || [], today);
+    const unit = UNITS[c.targetMetric] || "";
+    const target = Number.isFinite(r.target) ? `${r.target}${unit ? ` ${unit}` : ""}` : "no target set";
+    const latest = Number.isFinite(Number(r.latest)) ? r.latest : null;
+    const label = latest != null
+      ? `${latest} → ${target}${r.daysLeft != null ? ` · ${fmtDays(r.daysLeft)} left` : ""}`
+      : `— → ${target}`;
+    return el("span", "chip", label);
   };
 
   const { year, q } = quarterOf(today);
@@ -78,20 +93,13 @@ export async function renderHorizons(gh, view) {
       top.append(el("strong", null, c.title || c.id));
       top.append(el("span", "chip muted", c.pillar || "—"));
       row.append(top);
-      if (c.successCriteria) row.append(el("p", null, truncate(c.successCriteria)));
-      if (c.forcingFunction) row.append(el("p", "muted", truncate(c.forcingFunction)));
+      if (c.successCriteria) row.append(el("p", null, truncate(c.successCriteria, 160)));
+      if (c.forcingFunction) row.append(el("p", "muted", truncate(c.forcingFunction, 160)));
 
       const meta = el("div", "floors");
       meta.append(gateChip(c.gateDate));
       if (c.carryCount >= 3) meta.append(el("span", "chip warn", `carry ${c.carryCount}`));
-      if (c.targetMetric) {
-        const r = metricReadout(c, metricRows[c.targetMetric] || [], today);
-        const unit = UNITS[c.targetMetric] || "";
-        const label = r.latest != null
-          ? `${r.latest} → ${r.target}${unit ? ` ${unit}` : ""}${r.daysLeft != null ? ` · ${fmtDays(r.daysLeft)} left` : ""}`
-          : `— → ${r.target}${unit ? ` ${unit}` : ""}`;
-        meta.append(el("span", "chip", label));
-      }
+      if (c.targetMetric) meta.append(metricChip(c));
       row.append(meta);
       qCard.append(row);
     }
@@ -124,7 +132,7 @@ export async function renderHorizons(gh, view) {
   yCard.append(sectionHead("This Year", String(year)));
   const goals = annualGoals(commitments, today);
   if (!goals.length) {
-    yCard.append(el("p", "muted", "Annual goals not yet loaded."));
+    yCard.append(el("p", "muted", `No annual goals set for ${year}.`));
   } else {
     for (const c of goals) {
       const row = el("div", "commit-card");
@@ -132,7 +140,7 @@ export async function renderHorizons(gh, view) {
       top.append(el("strong", null, c.title || c.id));
       top.append(el("span", "chip muted", c.pillar || "—"));
       row.append(top);
-      if (c.successCriteria) row.append(el("p", null, truncate(c.successCriteria)));
+      if (c.successCriteria) row.append(el("p", null, truncate(c.successCriteria, 160)));
       const meta = el("div", "floors");
       meta.append(gateChip(c.gateDate));
       row.append(meta);

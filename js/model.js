@@ -1,7 +1,13 @@
 // model.js — pure logic, no DOM, no network. Everything here runs under node --test.
 //
-// PAIRED-CHANGE NOTE: parsing rules mirror lifemap/_System/bin/lifemap_compile.py
-// (frontmatter, CSV, weekly-plan MIT lines). Change them together.
+// PAIRED-CHANGE NOTE: the PARSING RULE (frontmatter/CSV/weekly-plan MIT-line
+// syntax) mirrors lifemap/_System/bin/lifemap_compile.py — change that
+// together. The FIELD SET each side projects does not have to match:
+// Ledger/state.json is a deliberately curated, Clerk-only subset (see
+// README's "can be stale" note) and is never read by this file's callers —
+// screens derive everything from raw Ledger files. A named field added here
+// (e.g. horizon, successCriteria) is additive and needs no Python change
+// unless the compiler's own consumers (Daily Brief, alerts) start using it.
 
 export const WD = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 export const MONS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -776,6 +782,13 @@ export function weeklyPlanCandidates(paths, { year, week }) {
 
 // ---------- gate chips (live countdowns — never from compiled artifacts) ----------
 
+// Shared urgency banding for a gate chip, by days-until. Board.js keeps its
+// own separate 2d/7d thresholds by design (different card density) — this
+// one is for gateChips and horizons.js, which are meant to agree.
+export function gateUrgencyClass(days) {
+  return days < 0 ? "overdue" : days <= 1 ? "urgent" : days <= 3 ? "soon" : "later";
+}
+
 export function gateChips(commitments, todayStr) {
   const chips = [];
   for (const c of commitments) {
@@ -784,14 +797,18 @@ export function gateChips(commitments, todayStr) {
       if (!d) continue;
       if (kind === "review" && c.gateDate) continue; // gate is the sharper signal
       const n = daysBetween(todayStr, d);
-      chips.push({
-        title: c.title, days: n,
-        label: `${kind} ${fmtDays(n)}`,
-        cls: n < 0 ? "overdue" : n <= 1 ? "urgent" : n <= 3 ? "soon" : "later",
-      });
+      chips.push({ title: c.title, days: n, label: `${kind} ${fmtDays(n)}`, cls: gateUrgencyClass(n) });
     }
   }
   return chips.sort((a, b) => a.days - b.days);
+}
+
+// Code-point-safe truncation (String.slice can split a surrogate pair,
+// corrupting a trailing emoji) — used to keep long free-text fields
+// (success_criteria, forcing_function) to a card-sized preview.
+export function truncate(s, n) {
+  const chars = Array.from(s);
+  return chars.length > n ? chars.slice(0, n).join("").trimEnd() + "…" : s;
 }
 
 // ---------- horizons (quarterly/annual goal summary — read-only) ----------
@@ -864,7 +881,7 @@ const REVIEWS_DIR = "Reviews - Month and Quarter";
 export function reviewPath(horizon, todayStr) {
   const q = /^(\d{4})-Q([1-4])$/.exec(horizon);
   if (q) return `${REVIEWS_DIR}/Q${q[2]}.md`;
-  const m = /^(\d{4})-(\d{2})$/.exec(horizon);
+  const m = /^(\d{4})-(0[1-9]|1[0-2])$/.exec(horizon);
   if (m) return `${REVIEWS_DIR}/${m[2]}-${m[1]}.md`;
   if (/^\d{4}$/.test(horizon)) return `${REVIEWS_DIR}/Q${quarterOf(todayStr).q}.md`;
   return null;
@@ -885,6 +902,10 @@ export const METRIC_FILES = {
   protein: "Ledger/Metrics/protein.csv",
   sleep_quality: "Ledger/Metrics/sleep_quality.csv",
 };
+
+// Display unit per metric — shared by today.js's log rows and horizons.js's
+// metric readout so the label vocabulary stays in one place.
+export const UNITS = { weight: "kg", steps: "steps", protein: "g", sleep_quality: "/5" };
 
 // pending: {metric: value}. Validates everything BEFORE building any change,
 // then upserts each metric's (today, ui) row. One commit for the whole batch.

@@ -18,6 +18,7 @@ function isoWeekOf(dateStr) {
 }
 const { year: IY, week: IW } = isoWeekOf(TODAY_FIX);
 const W = String(IW).padStart(2, "0");
+const Q = Math.ceil(Mn / 3);
 
 const plus = (days) => {
   const d = new Date(TODAY_FIX + "T12:00Z"); d.setUTCDate(d.getUTCDate() + days);
@@ -115,6 +116,8 @@ success_criteria: "3 written high-conviction theses; a screener over ~700 compan
 ---
 ## Log
 `,
+  [`Reviews - Month and Quarter/Q${Q}.md`]: `### Quarterly Review — Q${Q}\n\nDemo review content — exercises the Horizons section review-link in ?demo=1.\n`,
+  [`Reviews - Month and Quarter/${String(Mn).padStart(2, "0")}-${Y}.md`]: `### Monthly Review — ${MONS[Mn - 1]} ${Y}\n\nDemo review content — exercises the Horizons This Month review-link in ?demo=1.\n`,
   "Ledger/Commitments/learn-woodworking.md": `---
 id: learn-woodworking
 title: "Learn woodworking at the Gurgaon studio"

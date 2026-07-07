@@ -415,6 +415,15 @@ test("thisMonthGates: no matching gate returns []", () => {
   assert.deepEqual(M.thisMonthGates(commitments, "2026-07-07"), []);
 });
 
+test("thisMonthGates: excludes idea/done/retired state even with a matching gate or horizon", () => {
+  const commitments = [
+    mkCommitment({ id: "idea-this-month", state: "idea", gateDate: "2026-07-15" }),
+    mkCommitment({ id: "done-this-month", state: "done", horizon: "2026-07" }),
+    mkCommitment({ id: "retired-this-month", state: "retired", gateDate: "2026-07-15" }),
+  ];
+  assert.deepEqual(M.thisMonthGates(commitments, "2026-07-07"), []);
+});
+
 test("annualGoals: horizon:2026 active/committed only — excludes retired/done and quarter-horizon rocks", () => {
   const commitments = [
     mkCommitment({ id: "neural-reset", pillar: "mind", horizon: "2026", state: "active" }),
@@ -423,6 +432,16 @@ test("annualGoals: horizon:2026 active/committed only — excludes retired/done 
     mkCommitment({ id: "q3-rock", pillar: "finance", horizon: "2026-Q3", isRock: true, state: "active" }),
   ];
   assert.deepEqual(M.annualGoals(commitments, "2026-07-07").map((c) => c.id), ["neural-reset"]);
+});
+
+test("annualGoals: 2+ surviving items sort by pillar then title; a committed (not just active) goal survives", () => {
+  const commitments = [
+    mkCommitment({ id: "travel-goal", title: "Z travel goal", pillar: "travel", horizon: "2026", state: "active" }),
+    mkCommitment({ id: "finance-goal", title: "A finance goal", pillar: "finance", horizon: "2026", state: "committed" }),
+    mkCommitment({ id: "mind-goal", title: "M mind goal", pillar: "mind", horizon: "2026", state: "active" }),
+  ];
+  assert.deepEqual(M.annualGoals(commitments, "2026-07-07").map((c) => c.id),
+    ["finance-goal", "mind-goal", "travel-goal"]); // pillar-alphabetical: finance, mind, travel
 });
 
 test("metricReadout: latest-vs-target for a metric-linked commitment", () => {
@@ -436,6 +455,13 @@ test("metricReadout: no logged rows yet -> latest null (partial state); no targe
   const c = mkCommitment({ id: "resume-training", targetMetric: "weight", targetValue: 80, targetDate: "2026-08-04" });
   assert.equal(M.metricReadout(c, [], "2026-07-07").latest, null);
   assert.equal(M.metricReadout(mkCommitment({ id: "no-metric" }), [], "2026-07-07"), null);
+});
+
+test("metricReadout: target_metric set but no target_value -> target null (never crashes)", () => {
+  const c = mkCommitment({ id: "no-target", targetMetric: "weight" });
+  const r = M.metricReadout(c, [], "2026-07-07");
+  assert.equal(r.target, null);
+  assert.equal(r.daysLeft, null);
 });
 
 test("quarterOf: month -> quarter mapping incl. year boundaries", () => {
@@ -455,7 +481,36 @@ test("reviewPath: unrecognized horizon returns null (caller omits the link)", ()
   assert.equal(M.reviewPath("idea", "2026-07-07"), null);
 });
 
+test("reviewPath: rejects an out-of-range month instead of building a dead link", () => {
+  assert.equal(M.reviewPath("2026-13", "2026-07-07"), null);
+  assert.equal(M.reviewPath("2026-00", "2026-07-07"), null);
+});
+
 test("blobUrl: percent-encodes spaces per path segment, preserves slashes", () => {
   assert.equal(M.blobUrl("Reviews - Month and Quarter/Q3.md"),
     "https://github.com/rishisareen/lifemap/blob/main/Reviews%20-%20Month%20and%20Quarter/Q3.md");
+});
+
+test("gateUrgencyClass: urgency banding by days-until", () => {
+  assert.equal(M.gateUrgencyClass(-1), "overdue");
+  assert.equal(M.gateUrgencyClass(0), "urgent");
+  assert.equal(M.gateUrgencyClass(1), "urgent");
+  assert.equal(M.gateUrgencyClass(2), "soon");
+  assert.equal(M.gateUrgencyClass(3), "soon");
+  assert.equal(M.gateUrgencyClass(4), "later");
+});
+
+test("truncate: short text unchanged; long text cut with ellipsis", () => {
+  assert.equal(M.truncate("short", 160), "short");
+  const long = "x".repeat(200);
+  const t = M.truncate(long, 160);
+  assert.equal(t.length, 161); // 160 chars + ellipsis
+  assert.ok(t.endsWith("…"));
+});
+
+test("truncate: code-point-safe — never splits a surrogate-pair emoji at the boundary", () => {
+  const s = "x".repeat(9) + "🎯" + "y".repeat(10); // emoji's high surrogate lands exactly at UTF-16 index 9
+  const t = M.truncate(s, 10);
+  assert.equal(t, "x".repeat(9) + "🎯" + "…"); // whole emoji preserved, not split into a lone surrogate
+  assert.doesNotMatch(t, /[\uD800-\uDBFF](?![\uDC00-\uDFFF])/); // no unpaired high surrogate
 });

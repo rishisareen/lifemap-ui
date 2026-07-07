@@ -5,14 +5,13 @@
 import {
   todayIST, parseCommitment, parseFloors, floorKind,
   gateChips, buildMetricCommit, todaysLoggedValues,
-  validateMetric, journalPath, METRIC_FILES,
+  validateMetric, journalPath, METRIC_FILES, UNITS,
   dayPlanPath, parseDayPlan, extractJournalToday3, diffToday3, summarizeDiff,
   parseBusyCsv, ageString,
-} from "./model.js?v=10";
-import { AuthError, stashPending, takePending } from "./github.js?v=10";
+} from "./model.js?v=11";
+import { AuthError, stashPending, takePending } from "./github.js?v=11";
 
 const FLUSH_MS = 8000;
-const UNITS = { weight: "kg", steps: "steps", protein: "g", sleep_quality: "/5" };
 
 export async function renderToday(gh, view) {
   const today = todayIST();

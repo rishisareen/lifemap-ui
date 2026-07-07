@@ -19,14 +19,14 @@ Deployed: **https://rishisareen.com/lifemap-ui/** · Data repo: `rishisareen/lif
 | `model.js` | **All pure logic**, fully unit-tested. Mirrors the data repo's `_System/bin/lifemap_compile.py` parsing rules — **change the two together.** |
 | `github.js` | The only networked module: cached reads, the atomic write engine, journal guard, pending-write stash. |
 | `setup.js` | Token capture + validation (Contents push + Actions probe); re-auth preserves in-flight work. |
-| `today.js` / `inbox.js` / `board.js` / `wizard.js` | The four screens (Today, Inbox, Board, Review). |
+| `today.js` / `inbox.js` / `board.js` / `wizard.js` / `horizons.js` | The five screens (Today, Inbox, Board, Review, Horizons). |
 | `main.js` | Router + header status. |
 | `fixtures.js` | `?demo=1` fake backend with realistic data — the app runs tokenless for dev + screenshots. |
 
 ## Develop
 
 ```bash
-node --test          # run the suite (currently 60 tests)
+node --test          # run the suite (currently 103 tests)
 # preview: serve this dir on any static server and open ?demo=1  (no token, no network)
 ```
 

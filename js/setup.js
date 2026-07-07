@@ -1,7 +1,7 @@
 // setup.js — first-run token capture, validation, and re-auth on 401.
 // The token lives ONLY in localStorage on this machine and is sent only to api.github.com.
 
-import { GitHub } from "./github.js?v=10";
+import { GitHub } from "./github.js?v=11";
 
 const TOKEN_KEY = "lifemap.pat";
 
